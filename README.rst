@@ -1,6 +1,6 @@
 About
 =====
-Asynchronous client library for Airtable API.
+Asynchronous client library for `Airtable API <https://airtable.com/api>`_.
 
 Installation
 ============
