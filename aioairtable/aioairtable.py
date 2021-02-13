@@ -124,10 +124,10 @@ class Airtable:
             if debug():
                 logger.debug('Request %s %s %r', method, url.human_repr(),
                              kwargs)
-            response_data = response.json()
+            response_data = await response.json()
             if debug():
                 logger.debug('Response %r', response_data)
-            return await response_data
+            return response_data
 
     @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
                           giveup=backoff_giveup)
