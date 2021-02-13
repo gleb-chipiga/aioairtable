@@ -126,7 +126,7 @@ class Airtable:
                              kwargs)
             response_data = response.json()
             if debug():
-                logger.debug('Response %r', method, url.human_repr(), kwargs)
+                logger.debug('Response %r', response_data)
             return await response_data
 
     @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
