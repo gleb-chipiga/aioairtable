@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
@@ -10,7 +11,7 @@ from aiohttp import BaseConnector
 from multidict import MultiDict
 from yarl import URL
 
-from .helpers import get_software, json_dumps
+from .helpers import debug, get_software, json_dumps
 
 __all__ = ('Method', 'Fields', 'Thumbnail', 'Attachment', 'Collaborator',
            'SortDirection', 'CellFormat', 'parse_dt', 'Airtable',
@@ -26,6 +27,8 @@ DT_FORMAT: Final[str] = '%Y-%m-%dT%H:%M:%S.000Z'
 
 Method = Literal['GET', 'POST', 'PATCH', 'DELETE']
 Fields = Mapping[str, Any]
+
+logger = logging.getLogger('airtable')
 
 
 class Record(TypedDict):
@@ -118,7 +121,13 @@ class Airtable:
 
     async def _request(self, method: Method, url: URL, **kwargs: Any) -> Any:
         async with self._session.request(method, url, **kwargs) as response:
-            return await response.json()
+            if debug():
+                logger.debug('Request %s %s %r', method, url.human_repr(),
+                             kwargs)
+            response_data = response.json()
+            if debug():
+                logger.debug('Response %r', method, url.human_repr(), kwargs)
+            return await response_data
 
     @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
                           giveup=backoff_giveup)

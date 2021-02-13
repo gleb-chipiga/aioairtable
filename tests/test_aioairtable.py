@@ -52,6 +52,7 @@ class AirtableServer:
     def __init__(self) -> None:
         self._started: bool = False
         self._tmp_dir: Optional[str] = None
+        self._connector: Optional[UnixConnector] = None
         self._loop = asyncio.get_running_loop()
         self._tables: Dict[Tuple[str, str], List[aat.Record]] = {}
         self._requests: List[RequestData] = []
@@ -110,8 +111,11 @@ class AirtableServer:
     def _socket_path(self) -> str:
         return f'{self._tmp_dir}/site.socket'
 
+    @property
     def connector(self) -> UnixConnector:
-        return UnixConnector(self._socket_path)
+        if self._connector is None:
+            self._connector = UnixConnector(self._socket_path)
+        return self._connector
 
     async def list_records(self, request: Request) -> Response:
         base_id = request.match_info['base_id']
@@ -253,7 +257,7 @@ async def server(dt_str: str) -> AsyncGenerator[AirtableServer, None]:
 
 @pytest.fixture
 async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
-    airtable = Airtable('some_key', server.connector())
+    airtable = Airtable('some_key', server.connector)
     yield airtable
     await airtable.close()
 
