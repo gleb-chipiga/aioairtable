@@ -13,7 +13,7 @@ from aiohttp import BaseConnector
 from multidict import MultiDict
 from yarl import URL
 
-from .helpers import debug, get_software, json_dumps
+from .helpers import get_software, json_dumps
 
 __all__ = ('Method', 'Fields', 'Thumbnail', 'Attachment', 'Collaborator',
            'SortDirection', 'CellFormat', 'parse_dt', 'Airtable',
@@ -123,12 +123,9 @@ class Airtable:
         async with self._session.request(
             method, url, headers=self._auth_headers, json=json
         ) as response:
-            if debug():
-                logger.debug('Request %s %s %r', method, url.human_repr(),
-                             json)
+            logger.debug('Request %s %s %r', method, url.human_repr(), json)
             response_data = json_loads(await response.read())
-            if debug():
-                logger.debug('Response %r', response_data)
+            logger.debug('Response %r', response_data)
             return response_data
 
     @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
