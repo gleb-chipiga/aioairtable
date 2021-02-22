@@ -6,10 +6,9 @@ from types import TracebackType
 from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
                     Literal, Mapping, Optional, Tuple, Type, TypedDict, Union)
 
-import aiohttp
 import backoff
 from aiofreqlimit import FreqLimit
-from aiohttp import BaseConnector
+from aiohttp import BaseConnector, ClientResponseError, ClientSession
 from multidict import MultiDict
 from yarl import URL
 
@@ -95,7 +94,7 @@ def backoff_wait_gen() -> Generator[float, None, None]:
 
 
 def backoff_giveup(exception: Exception) -> bool:
-    assert isinstance(exception, aiohttp.ClientResponseError)
+    assert isinstance(exception, ClientResponseError)
     return exception.status != TOO_MANY_REQUESTS
 
 
@@ -110,7 +109,7 @@ class Airtable:
         self, api_key: str, connector: Optional[BaseConnector] = None
     ) -> None:
         self._auth_headers = {'Authorization': f'Bearer {api_key}'}
-        self._session = aiohttp.ClientSession(
+        self._session = ClientSession(
             connector=connector, headers={'User-Agent': SOFTWARE},
             json_serialize=json_dumps, raise_for_status=True)
         self._freq_limit = FreqLimit(AT_INTERVAL)
@@ -128,7 +127,7 @@ class Airtable:
             logger.debug('Response %r', response_data)
             return response_data
 
-    @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
+    @backoff.on_exception(backoff_wait_gen, ClientResponseError,
                           giveup=backoff_giveup)
     async def request(self, base_id: str, method: Method, url: URL,
                       json: Any = None) -> Any:
