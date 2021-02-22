@@ -24,7 +24,6 @@ Requirements
 * Python >= 3.8
 * `aiohttp <https://github.com/aio-libs/aiohttp>`_
 * `multidict <https://github.com/aio-libs/multidict>`_
-* `attrs <https://github.com/python-attrs/attrs>`_
 * `backoff <https://github.com/litl/backoff>`_
 * `aiofreqlimit <https://github.com/gleb-chipiga/aiofreqlimit>`_
 * `yarl <https://github.com/aio-libs/yarl>`_
