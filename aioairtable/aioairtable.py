@@ -107,23 +107,23 @@ class Airtable:
     def __init__(
         self, api_key: str, connector: Optional[BaseConnector] = None
     ) -> None:
-        headers = {
-            'Authorization': f'Bearer {api_key}',
-            'User-Agent': SOFTWARE
-        }
+        self._auth_headers = {'Authorization': f'Bearer {api_key}'}
         self._session = aiohttp.ClientSession(
-            connector=connector, headers=headers, json_serialize=json_dumps,
-            raise_for_status=True)
+            connector=connector, headers={'User-Agent': SOFTWARE},
+            json_serialize=json_dumps, raise_for_status=True)
         self._freq_limit = FreqLimit(AT_INTERVAL)
 
     def __repr__(self) -> str:
         return build_repr('Airtable', api_key='...')
 
-    async def _request(self, method: Method, url: URL, **kwargs: Any) -> Any:
-        async with self._session.request(method, url, **kwargs) as response:
+    async def _request(self, method: Method, url: URL,
+                       json: Any = None) -> Any:
+        async with self._session.request(
+            method, url, headers=self._auth_headers, json=json
+        ) as response:
             if debug():
                 logger.debug('Request %s %s %r', method, url.human_repr(),
-                             kwargs)
+                             json)
             response_data = await response.json()
             if debug():
                 logger.debug('Response %r', response_data)
@@ -132,9 +132,9 @@ class Airtable:
     @backoff.on_exception(backoff_wait_gen, aiohttp.ClientResponseError,
                           giveup=backoff_giveup)
     async def request(self, base_id: str, method: Method, url: URL,
-                      **kwargs: Any) -> Any:
+                      json: Any = None) -> Any:
         async with self._freq_limit.acquire(base_id):
-            return await self._request(method, url, **kwargs)
+            return await self._request(method, url, json=json)
 
     async def close(self) -> None:
         await self._session.close()
@@ -163,8 +163,8 @@ class AirtableBase:
     def url(self) -> URL:
         return self._url
 
-    async def request(self, method: Method, url: URL, **kwargs: Any) -> Any:
-        return await self._airtable.request(self._id, method, url, **kwargs)
+    async def request(self, method: Method, url: URL, json: Any = None) -> Any:
+        return await self._airtable.request(self._id, method, url, json=json)
 
     def table(self, table_name: str) -> 'AirtableTable':
         return AirtableTable(table_name, self)
@@ -193,8 +193,9 @@ class AirtableTable:
     def base(self) -> AirtableBase:
         return self._base
 
-    async def _request(self, method: Method, url: URL, **kwargs: Any) -> Any:
-        return await self._base.request(method, url, **kwargs)
+    async def _request(self, method: Method, url: URL,
+                       json: Any = None) -> Any:
+        return await self._base.request(method, url, json=json)
 
     async def list_records(
         self,
@@ -320,8 +321,9 @@ class AirtableRecord:
     def table(self) -> AirtableTable:
         return self._table
 
-    async def _request(self, method: Method, url: URL, **kwargs: Any) -> Any:
-        return await self._table.base.request(method, url, **kwargs)
+    async def _request(self, method: Method, url: URL,
+                       json: Any = None) -> Any:
+        return await self._table.base.request(method, url, json=json)
 
     async def update(self, fields: Fields) -> Fields:
         if self._deleted:

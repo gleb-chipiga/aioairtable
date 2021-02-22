@@ -3,11 +3,15 @@ import os
 import re
 from datetime import datetime, timezone
 from tempfile import mkdtemp
-from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, List,
-                    Optional, Protocol, Tuple, cast, runtime_checkable)
+from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Final,
+                    List, Optional, Protocol, Tuple, cast, runtime_checkable)
 
 import attr
 import pytest
+from aioairtable import aioairtable as aat
+from aioairtable.aioairtable import (SOFTWARE, Airtable, AirtableBase,
+                                     AirtableRecord, AirtableTable, CellFormat,
+                                     SortDirection, parse_dt)
 from aiohttp import ClientResponseError, RequestInfo, UnixConnector
 from aiohttp.web import (Application, AppRunner, HTTPBadRequest, HTTPNotFound,
                          Request, Response, StreamResponse, UnixSite, delete,
@@ -16,11 +20,6 @@ from hypothesis import given
 from hypothesis.strategies import integers
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
-
-from aioairtable import aioairtable as aat
-from aioairtable.aioairtable import (Airtable, AirtableBase, AirtableRecord,
-                                     AirtableTable, CellFormat, SortDirection,
-                                     parse_dt)
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -49,14 +48,15 @@ def fields_sort_key(field: str) -> Callable[[aat.Record], SupportsLessThan]:
 
 class AirtableServer:
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str) -> None:
         self._started: bool = False
         self._tmp_dir: Optional[str] = None
         self._connector: Optional[UnixConnector] = None
         self._loop = asyncio.get_running_loop()
         self._tables: Dict[Tuple[str, str], List[aat.Record]] = {}
         self._requests: List[RequestData] = []
-        application = Application(middlewares=(self.requests_middleware,))
+        self._api_key: Final[str] = api_key
+        application = Application(middlewares=(self._auth, self._log))
         application.router.add_routes((
             get('/v0/{base_id}/{table_name}', self.list_records),
             get('/v0/{base_id}/{table_name}/{record_id}',
@@ -70,8 +70,16 @@ class AirtableServer:
         self._runner = AppRunner(application)
 
     @middleware
-    async def requests_middleware(self, request: Request,
-                                  handler: Handler) -> StreamResponse:
+    async def _auth(self, request: Request,
+                    handler: Handler) -> StreamResponse:
+        if request.headers.get('Authorization') != f'Bearer {self._api_key}':
+            raise HTTPBadRequest(reason='Wrong authorization header')
+        if request.headers.get('User-Agent') != SOFTWARE:
+            raise HTTPBadRequest(reason='Wrong user-agent header')
+        return await handler(request)
+
+    @middleware
+    async def _log(self, request: Request, handler: Handler) -> StreamResponse:
         url = request.url.with_scheme('https')
         has_data = request.method in ('POST', 'PATCH')
         data = await request.json() if has_data else None
@@ -241,7 +249,7 @@ def dt_str() -> str:
 
 @pytest.fixture
 async def server(dt_str: str) -> AsyncGenerator[AirtableServer, None]:
-    server = AirtableServer()
+    server = AirtableServer('some_key')
     records = [
         aat.Record(id=f'record{index:03d}', fields={
             'field_1': f'value_1_{index:03d}',

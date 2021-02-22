@@ -37,7 +37,8 @@ async def test_airtable_underscore_request(airtable: Airtable, url: URL,
     response = request.return_value.__aenter__.return_value
     response.json.return_value = response_data
     assert await airtable._request('GET', url) == response_data
-    request.assert_called_once_with('GET', url)
+    request.assert_called_once_with(
+        'GET', url, headers={'Authorization': 'Bearer secret_key'}, json=None)
     response.json.assert_awaited_once_with()
 
 
@@ -49,7 +50,7 @@ async def test_airtable_request(airtable: Airtable, url: URL,
     request = mocker.patch.object(airtable, '_request')
     request.return_value = response_data
     assert await airtable.request('some_base_id', 'GET', url) == response_data
-    request.assert_awaited_once_with('GET', url)
+    request.assert_awaited_once_with('GET', url, json=None)
     time1 = loop.time()
     assert await airtable.request('some_base_id', 'GET', url) == response_data
     time2 = loop.time()
@@ -64,7 +65,7 @@ async def test_airtable_base_request(airtable: Airtable, url: URL,
     request = mocker.patch.object(base._airtable, 'request')
     request.return_value = response_data
     assert await base.request('GET', url) == response_data
-    request.assert_awaited_once_with('some_base_id', 'GET', url)
+    request.assert_awaited_once_with('some_base_id', 'GET', url, json=None)
 
 
 @pytest.mark.asyncio
@@ -76,7 +77,7 @@ async def test_airtable_table_request(airtable: Airtable, url: URL,
     request = mocker.patch.object(table._base, 'request')
     request.return_value = response_data
     assert await table._request('GET', url) == response_data
-    request.assert_awaited_once_with('GET', url)
+    request.assert_awaited_once_with('GET', url, json=None)
 
 
 @pytest.mark.asyncio
@@ -196,7 +197,7 @@ async def test_airtable_record_request(
     request = mocker.patch.object(record.table._base, 'request')
     request.return_value = response_data
     assert await table._request('GET', url) == response_data
-    request.assert_awaited_once_with('GET', url)
+    request.assert_awaited_once_with('GET', url, json=None)
 
 
 @pytest.mark.asyncio
