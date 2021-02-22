@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from enum import Enum
+from json import loads as json_loads
 from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
                     Literal, Mapping, Optional, Tuple, TypedDict, Union)
 
@@ -124,7 +125,7 @@ class Airtable:
             if debug():
                 logger.debug('Request %s %s %r', method, url.human_repr(),
                              json)
-            response_data = await response.json()
+            response_data = json_loads(await response.read())
             if debug():
                 logger.debug('Response %r', response_data)
             return response_data

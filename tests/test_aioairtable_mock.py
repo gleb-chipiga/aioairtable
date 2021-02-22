@@ -8,6 +8,7 @@ from aioairtable import Airtable
 from aioairtable import aioairtable as aat
 from aioairtable.aioairtable import (AirtableRecord, CellFormat, SortDirection,
                                      parse_dt)
+from aioairtable.helpers import json_dumps
 from pytest_mock import MockerFixture
 from yarl import URL
 
@@ -35,11 +36,11 @@ async def test_airtable_underscore_request(airtable: Airtable, url: URL,
     response_data = {'some_key': 55}
     request = mocker.patch.object(airtable._session, 'request')
     response = request.return_value.__aenter__.return_value
-    response.json.return_value = response_data
+    response.read.return_value = json_dumps(response_data)
     assert await airtable._request('GET', url) == response_data
     request.assert_called_once_with(
         'GET', url, headers={'Authorization': 'Bearer secret_key'}, json=None)
-    response.json.assert_awaited_once_with()
+    response.read.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
