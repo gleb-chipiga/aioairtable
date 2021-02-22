@@ -34,7 +34,7 @@ async def airtable() -> AsyncGenerator[Airtable, None]:
 async def test_airtable_underscore_request(airtable: Airtable, url: URL,
                                            mocker: MockerFixture) -> None:
     response_data = {'some_key': 55}
-    request = mocker.patch.object(airtable._session, 'request')
+    request = mocker.patch.object(airtable._client, 'request')
     response = request.return_value.__aenter__.return_value
     response.read.return_value = json_dumps(response_data)
     assert await airtable._request('GET', url) == response_data

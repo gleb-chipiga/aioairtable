@@ -12,7 +12,8 @@ from aioairtable import aioairtable as aat
 from aioairtable.aioairtable import (SOFTWARE, Airtable, AirtableBase,
                                      AirtableRecord, AirtableTable, CellFormat,
                                      SortDirection, parse_dt)
-from aiohttp import ClientResponseError, RequestInfo, UnixConnector
+from aiohttp import (ClientResponseError, ClientSession, RequestInfo,
+                     UnixConnector)
 from aiohttp.web import (Application, AppRunner, HTTPBadRequest, HTTPNotFound,
                          Request, Response, StreamResponse, UnixSite, delete,
                          get, json_response, middleware, patch, post)
@@ -320,6 +321,11 @@ async def test_airtable_repr(airtable: Airtable) -> None:
 
 
 @pytest.mark.asyncio
+async def test_airtable_client(airtable: Airtable) -> None:
+    assert isinstance(airtable.client, ClientSession)
+
+
+@pytest.mark.asyncio
 async def test_airtable_underscore_request(server: AirtableServer,
                                            airtable: Airtable,
                                            url: URL) -> None:
@@ -347,14 +353,14 @@ async def test_airtable_request(server: AirtableServer,
 async def test_airtable_close() -> None:
     airtable = Airtable('secret_key')
     await airtable.close()
-    assert airtable._session.closed
+    assert airtable._client.closed
 
 
 @pytest.mark.asyncio
 async def test_airtable_context(airtable: Airtable) -> None:
     async with airtable:
         pass
-    assert airtable._session.closed
+    assert airtable._client.closed
 
 
 @pytest.mark.asyncio

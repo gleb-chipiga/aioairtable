@@ -109,7 +109,7 @@ class Airtable:
         self, api_key: str, connector: Optional[BaseConnector] = None
     ) -> None:
         self._auth_headers = {'Authorization': f'Bearer {api_key}'}
-        self._session = ClientSession(
+        self._client = ClientSession(
             connector=connector, headers={'User-Agent': SOFTWARE},
             json_serialize=json_dumps, raise_for_status=True)
         self._freq_limit = FreqLimit(AT_INTERVAL)
@@ -117,9 +117,13 @@ class Airtable:
     def __repr__(self) -> str:
         return build_repr('Airtable', api_key='...')
 
+    @property
+    def client(self) -> ClientSession:
+        return self._client
+
     async def _request(self, method: Method, url: URL,
                        json: Any = None) -> Any:
-        async with self._session.request(
+        async with self._client.request(
             method, url, headers=self._auth_headers, json=json
         ) as response:
             logger.debug('Request %s %s %r', method, url.human_repr(), json)
@@ -135,7 +139,7 @@ class Airtable:
             return await self._request(method, url, json=json)
 
     async def close(self) -> None:
-        await self._session.close()
+        await self._client.close()
         await self._freq_limit.clear()
 
     def base(self, base_id: str) -> 'AirtableBase':
