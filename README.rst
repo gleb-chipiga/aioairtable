@@ -1,14 +1,33 @@
-About
-=====
-Asynchronous client library for `Airtable API <https://airtable.com/api>`_.
+============================================
+Asynchronous client library for Airtable API
+============================================
+
+Key Features
+============
+
+* Asyncio and `aiohttp <https://github.com/aio-libs/aiohttp>`_ based
+* All `airtable REST API <https://airtable.com/api>`_ methods supported
+* API rate limit support
+* Fully type annotated (`PEP 484 <https://www.python.org/dev/peps/pep-0484/>`_)
 
 Installation
 ============
-aioairtable requires Python 3.8 or greater and is available on PyPI. Use pip to install it:
+aioairtable is available on PyPI. Use pip to install it:
 
 .. code-block:: bash
 
     pip install aioairtable
+
+Requirements
+============
+
+* Python >= 3.8
+* `aiohttp <https://github.com/aio-libs/aiohttp>`_
+* `multidict <https://github.com/aio-libs/multidict>`_
+* `attrs <https://github.com/python-attrs/attrs>`_
+* `backoff <https://github.com/litl/backoff>`_
+* `aiofreqlimit <https://github.com/gleb-chipiga/aiofreqlimit>`_
+* `yarl <https://github.com/aio-libs/yarl>`_
 
 Using aioairtable
 ==================
