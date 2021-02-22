@@ -351,6 +351,13 @@ async def test_airtable_close() -> None:
 
 
 @pytest.mark.asyncio
+async def test_airtable_context(airtable: Airtable) -> None:
+    async with airtable:
+        pass
+    assert airtable._session.closed
+
+
+@pytest.mark.asyncio
 async def test_airtable_base(airtable: Airtable) -> None:
     base = airtable.base('some_base_id')
     assert isinstance(base, AirtableBase)

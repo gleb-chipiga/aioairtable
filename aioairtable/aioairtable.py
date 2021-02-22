@@ -2,8 +2,9 @@ import logging
 from datetime import datetime, timezone
 from enum import Enum
 from json import loads as json_loads
+from types import TracebackType
 from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
-                    Literal, Mapping, Optional, Tuple, TypedDict, Union)
+                    Literal, Mapping, Optional, Tuple, Type, TypedDict, Union)
 
 import aiohttp
 import backoff
@@ -143,6 +144,14 @@ class Airtable:
 
     def base(self, base_id: str) -> 'AirtableBase':
         return AirtableBase(base_id, self)
+
+    async def __aenter__(self) -> 'Airtable':
+        return self
+
+    async def __aexit__(self, exc_type: Optional[Type[BaseException]],
+                        exc_val: Optional[BaseException],
+                        exc_tb: Optional[TracebackType]) -> None:
+        await self.close()
 
 
 class AirtableBase:
