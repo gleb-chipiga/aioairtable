@@ -23,6 +23,7 @@ API_URL: Final[URL] = URL('https://api.airtable.com/v0')
 AT_INTERVAL: Final[float] = 1 / 5
 AT_WAIT: Final[float] = 30
 TOO_MANY_REQUESTS: Final[int] = 429
+SERVICE_UNAVAILABLE: Final[int] = 503
 DT_FORMAT: Final[str] = '%Y-%m-%dT%H:%M:%S.000Z'
 
 
@@ -95,7 +96,7 @@ def backoff_wait_gen() -> Generator[float, None, None]:
 
 def backoff_giveup(exception: Exception) -> bool:
     assert isinstance(exception, ClientResponseError)
-    return exception.status != TOO_MANY_REQUESTS
+    return exception.status not in (TOO_MANY_REQUESTS, SERVICE_UNAVAILABLE)
 
 
 def build_repr(class_name: str, **kwargs: Any) -> str:
