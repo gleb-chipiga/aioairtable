@@ -1,4 +1,4 @@
-__version__ = '0.0.7'
+__version__ = '0.0.8'
 
 from .aioairtable import (Airtable, AirtableBase, AirtableRecord,
                           AirtableTable, Attachment, CellFormat, Collaborator,
