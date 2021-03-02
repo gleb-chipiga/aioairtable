@@ -9,9 +9,9 @@ from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Final,
 import attr
 import pytest
 from aioairtable import aioairtable as aat
-from aioairtable.aioairtable import (SOFTWARE, Airtable, AirtableBase,
-                                     AirtableRecord, AirtableTable, CellFormat,
-                                     SortDirection, parse_dt)
+from aioairtable.aioairtable import (Airtable, AirtableBase, AirtableRecord,
+                                     AirtableTable, CellFormat, SortDirection,
+                                     parse_dt)
 from aiohttp import (ClientResponseError, ClientSession, RequestInfo,
                      UnixConnector)
 from aiohttp.web import (Application, AppRunner, HTTPBadRequest, HTTPNotFound,
@@ -73,9 +73,11 @@ class AirtableServer:
     @middleware
     async def _auth(self, request: Request,
                     handler: Handler) -> StreamResponse:
-        if request.headers.get('Authorization') != f'Bearer {self._api_key}':
+        if 'Authorization' not in request.headers:
+            raise HTTPBadRequest(reason='Authorization header absent')
+        if request.headers['Authorization'] != f'Bearer {self._api_key}':
             raise HTTPBadRequest(reason='Wrong authorization header')
-        if request.headers.get('User-Agent') != SOFTWARE:
+        if request.headers.get('User-Agent') != aat.SOFTWARE:
             raise HTTPBadRequest(reason='Wrong user-agent header')
         return await handler(request)
 
@@ -322,8 +324,13 @@ async def test_airtable_repr(airtable: Airtable) -> None:
 
 
 @pytest.mark.asyncio
-async def test_airtable_client(airtable: Airtable) -> None:
+async def test_airtable_client(server: AirtableServer,
+                               airtable: Airtable, url: URL) -> None:
     assert isinstance(airtable.client, ClientSession)
+    with pytest.raises(ClientResponseError,
+                       match='Authorization header absent'):
+        await airtable.client.get(url)
+    assert server.requests() == []
 
 
 @pytest.mark.asyncio
