@@ -304,7 +304,7 @@ def client_response_error(status: int) -> ClientResponseError:
 
 @given(integers(min_value=100, max_value=526))
 def test_backoff_giveup(status: int) -> None:
-    backoff_flag = status not in (429, 503)
+    backoff_flag = status not in (429, 503, 504)
     assert aat.backoff_giveup(client_response_error(status)) == backoff_flag
 
 

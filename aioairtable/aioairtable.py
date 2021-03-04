@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from enum import Enum
+from enum import Enum, IntEnum, unique
 from json import loads as json_loads
 from types import TracebackType
 from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
@@ -22,9 +22,14 @@ SOFTWARE: Final[str] = get_software()
 API_URL: Final[URL] = URL('https://api.airtable.com/v0')
 AT_INTERVAL: Final[float] = 1 / 5
 AT_WAIT: Final[float] = 30
-TOO_MANY_REQUESTS: Final[int] = 429
-SERVICE_UNAVAILABLE: Final[int] = 503
 DT_FORMAT: Final[str] = '%Y-%m-%dT%H:%M:%S.000Z'
+
+
+@unique
+class BackoffCodes(IntEnum):
+    TOO_MANY_REQUESTS = 429
+    SERVICE_UNAVAILABLE = 503
+    GATEWAY_TIMEOUT = 504
 
 
 Method = Literal['GET', 'POST', 'PATCH', 'DELETE']
@@ -96,7 +101,12 @@ def backoff_wait_gen() -> Generator[float, None, None]:
 
 def backoff_giveup(exception: Exception) -> bool:
     assert isinstance(exception, ClientResponseError)
-    return exception.status not in (TOO_MANY_REQUESTS, SERVICE_UNAVAILABLE)
+    try:
+        BackoffCodes(exception.status)
+    except ValueError:
+        return True
+    else:
+        return False
 
 
 def build_repr(class_name: str, **kwargs: Any) -> str:
