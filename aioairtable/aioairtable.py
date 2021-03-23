@@ -28,6 +28,7 @@ DT_FORMAT: Final[str] = '%Y-%m-%dT%H:%M:%S.000Z'
 @unique
 class BackoffCodes(IntEnum):
     TOO_MANY_REQUESTS = 429
+    BAD_GATEWAY = 502
     SERVICE_UNAVAILABLE = 503
     GATEWAY_TIMEOUT = 504
 
