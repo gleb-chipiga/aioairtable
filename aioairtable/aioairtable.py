@@ -61,6 +61,14 @@ class Thumbnail(TypedDict):
     height: int
 
 
+class TotalRequestAttachment(TypedDict):
+    url: str
+
+
+class RequestAttachment(TotalRequestAttachment, total=False):
+    filename: str
+
+
 class TotalAttachment(TypedDict):
     id: str
     url: str
