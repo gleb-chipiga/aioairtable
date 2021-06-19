@@ -15,8 +15,9 @@ from yarl import URL
 from .helpers import get_software, json_dumps
 
 __all__ = ('DT_FORMAT', 'Method', 'Fields', 'Thumbnail', 'Attachment',
-           'Collaborator', 'SortDirection', 'CellFormat', 'parse_dt',
-           'Airtable', 'AirtableBase', 'AirtableTable', 'AirtableRecord')
+           'RequestAttachment', 'Collaborator', 'SortDirection', 'CellFormat',
+           'parse_dt', 'Airtable', 'AirtableBase', 'AirtableTable',
+           'AirtableRecord')
 
 SOFTWARE: Final[str] = get_software()
 API_URL: Final[URL] = URL('https://api.airtable.com/v0')
