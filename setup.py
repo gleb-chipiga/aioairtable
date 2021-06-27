@@ -23,6 +23,7 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'License :: OSI Approved :: MIT License',
         'Development Status :: 3 - Alpha',
         'Operating System :: POSIX',
@@ -40,5 +41,6 @@ setup(
     python_requires='>=3.8',
     install_requires=['aiohttp', 'multidict', 'yarl', 'backoff',
                       'aiofreqlimit'],
-    tests_require=['pytest', 'pytest-asyncio', 'hypothesis', 'attrs']
+    tests_require=['pytest', 'pytest-asyncio', 'pytest-mock', 'hypothesis',
+                   'attrs']
 )
