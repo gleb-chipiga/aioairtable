@@ -156,7 +156,7 @@ class Airtable:
                           giveup=backoff_giveup)
     async def request(self, base_id: str, method: Method, url: URL,
                       json: Any = None) -> Any:
-        async with self._freq_limit.acquire(base_id):
+        async with self._freq_limit.resource(base_id):
             return await self._request(method, url, json=json)
 
     async def close(self) -> None:
