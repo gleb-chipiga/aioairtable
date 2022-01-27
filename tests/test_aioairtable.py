@@ -8,10 +8,6 @@ from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Final,
 
 import attr
 import pytest
-from aioairtable import aioairtable as aat
-from aioairtable.aioairtable import (Airtable, AirtableBase, AirtableRecord,
-                                     AirtableTable, CellFormat, SortDirection,
-                                     parse_dt)
 from aiohttp import (ClientResponseError, ClientSession, RequestInfo,
                      UnixConnector)
 from aiohttp.web import (Application, AppRunner, HTTPBadRequest, HTTPNotFound,
@@ -21,6 +17,11 @@ from hypothesis import given
 from hypothesis.strategies import integers
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
+
+from aioairtable import aioairtable as aat
+from aioairtable.aioairtable import (Airtable, AirtableBase, AirtableRecord,
+                                     AirtableTable, CellFormat, SortDirection,
+                                     parse_dt)
 
 
 @attr.s(auto_attribs=True, frozen=True)

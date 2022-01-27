@@ -4,13 +4,14 @@ from typing import AsyncGenerator
 from unittest.mock import call
 
 import pytest
+from pytest_mock import MockerFixture
+from yarl import URL
+
 from aioairtable import Airtable
 from aioairtable import aioairtable as aat
 from aioairtable.aioairtable import (AirtableRecord, CellFormat, SortDirection,
                                      parse_dt)
 from aioairtable.helpers import json_dumps
-from pytest_mock import MockerFixture
-from yarl import URL
 
 
 @pytest.fixture
