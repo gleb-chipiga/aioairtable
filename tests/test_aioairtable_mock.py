@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 from unittest.mock import call
 
 import pytest
+import pytest_asyncio
 from pytest_mock import MockerFixture
 from yarl import URL
 
@@ -24,46 +25,46 @@ def url() -> URL:
     return URL('https://example.com')
 
 
-@pytest.fixture
-async def airtable() -> AsyncGenerator[Airtable, None]:
+@pytest_asyncio.fixture
+async def _airtable() -> AsyncGenerator[Airtable, None]:
     airtable = Airtable('secret_key')
     yield airtable
     await airtable.close()
 
 
 @pytest.mark.asyncio
-async def test_airtable_underscore_request(airtable: Airtable, url: URL,
+async def test_airtable_underscore_request(_airtable: Airtable, url: URL,
                                            mocker: MockerFixture) -> None:
     response_data = {'some_key': 55}
-    request = mocker.patch.object(airtable._client, 'request')
+    request = mocker.patch.object(_airtable._client, 'request')
     response = request.return_value.__aenter__.return_value
     response.read.return_value = json_dumps(response_data)
-    assert await airtable._request('GET', url) == response_data
+    assert await _airtable._request('GET', url) == response_data
     request.assert_called_once_with(
         'GET', url, headers={'Authorization': 'Bearer secret_key'}, json=None)
     response.read.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
-async def test_airtable_request(airtable: Airtable, url: URL,
+async def test_airtable_request(_airtable: Airtable, url: URL,
                                 mocker: MockerFixture) -> None:
     loop = asyncio.get_running_loop()
     response_data = {'some_key': 55}
-    request = mocker.patch.object(airtable, '_request')
+    request = mocker.patch.object(_airtable, '_request')
     request.return_value = response_data
-    assert await airtable.request('some_base_id', 'GET', url) == response_data
+    assert await _airtable.request('some_base_id', 'GET', url) == response_data
     request.assert_awaited_once_with('GET', url, json=None)
     time1 = loop.time()
-    assert await airtable.request('some_base_id', 'GET', url) == response_data
+    assert await _airtable.request('some_base_id', 'GET', url) == response_data
     time2 = loop.time()
     assert time2 - time1 >= aat.AT_INTERVAL
 
 
 @pytest.mark.asyncio
-async def test_airtable_base_request(airtable: Airtable, url: URL,
+async def test_airtable_base_request(_airtable: Airtable, url: URL,
                                      mocker: MockerFixture) -> None:
     response_data = {'some_key': 55}
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     request = mocker.patch.object(base._airtable, 'request')
     request.return_value = response_data
     assert await base.request('GET', url) == response_data
@@ -71,10 +72,10 @@ async def test_airtable_base_request(airtable: Airtable, url: URL,
 
 
 @pytest.mark.asyncio
-async def test_airtable_table_request(airtable: Airtable, url: URL,
+async def test_airtable_table_request(_airtable: Airtable, url: URL,
                                       mocker: MockerFixture) -> None:
     response_data = {'some_key': 55}
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     request = mocker.patch.object(table._base, 'request')
     request.return_value = response_data
@@ -83,9 +84,9 @@ async def test_airtable_table_request(airtable: Airtable, url: URL,
 
 
 @pytest.mark.asyncio
-async def test_airtable_table_list_records(airtable: Airtable,
+async def test_airtable_table_list_records(_airtable: Airtable,
                                            mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     request = mocker.patch.object(table, '_request')
     request.return_value = {'records': []}
@@ -126,9 +127,9 @@ async def test_airtable_table_list_records(airtable: Airtable,
 
 
 @pytest.mark.asyncio
-async def test_airtable_table_iter_records(airtable: Airtable, dt_str: str,
+async def test_airtable_table_iter_records(_airtable: Airtable, dt_str: str,
                                            mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     request = mocker.patch.object(table, '_request')
     request.side_effect = (
@@ -155,9 +156,9 @@ async def test_airtable_table_iter_records(airtable: Airtable, dt_str: str,
 
 
 @pytest.mark.asyncio
-async def test_airtable_table_retrieve_record(airtable: Airtable, dt_str: str,
+async def test_airtable_table_retrieve_record(_airtable: Airtable, dt_str: str,
                                               mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     request = mocker.patch.object(table, '_request')
     request.return_value = {'id': 'record1', 'fields': {},
@@ -172,9 +173,9 @@ async def test_airtable_table_retrieve_record(airtable: Airtable, dt_str: str,
 
 
 @pytest.mark.asyncio
-async def test_airtable_table_create_record(airtable: Airtable, dt_str: str,
+async def test_airtable_table_create_record(_airtable: Airtable, dt_str: str,
                                             mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     request = mocker.patch.object(table, '_request')
     request.return_value = {'id': 'record1', 'fields': {},
@@ -190,10 +191,10 @@ async def test_airtable_table_create_record(airtable: Airtable, dt_str: str,
 
 @pytest.mark.asyncio
 async def test_airtable_record_request(
-    airtable: Airtable, dt_str: str, url: URL, mocker: MockerFixture
+    _airtable: Airtable, dt_str: str, url: URL, mocker: MockerFixture
 ) -> None:
     response_data = {'some_key': 55}
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     record = AirtableRecord('record1', {}, dt_str, table)
     request = mocker.patch.object(record.table._base, 'request')
@@ -203,9 +204,9 @@ async def test_airtable_record_request(
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_update(airtable: Airtable, dt_str: str,
+async def test_airtable_record_update(_airtable: Airtable, dt_str: str,
                                       mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     record = AirtableRecord('record1', {}, dt_str, table)
     request = mocker.patch.object(record, '_request')
@@ -215,9 +216,9 @@ async def test_airtable_record_update(airtable: Airtable, dt_str: str,
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_delete(airtable: Airtable, dt_str: str,
+async def test_airtable_record_delete(_airtable: Airtable, dt_str: str,
                                       mocker: MockerFixture) -> None:
-    base = airtable.base('some_base_id')
+    base = _airtable.base('some_base_id')
     table = base.table('some_table')
     record = AirtableRecord('record1', {}, dt_str, table)
     request = mocker.patch.object(record, '_request')

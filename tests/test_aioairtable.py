@@ -8,6 +8,7 @@ from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Final,
 
 import attr
 import pytest
+import pytest_asyncio
 from aiohttp import (ClientResponseError, ClientSession, RequestInfo,
                      UnixConnector)
 from aiohttp.web import (Application, AppRunner, HTTPBadRequest, HTTPNotFound,
@@ -240,18 +241,18 @@ class AirtableServer:
             raise HTTPNotFound()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 def url() -> URL:
     url = URL('https://api.airtable.com/v0/base_id/table_name')
     return url.with_query(maxRecords=0)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 def dt_str() -> str:
     return datetime.now().strftime(aat.DT_FORMAT)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def server(dt_str: str) -> AsyncGenerator[AirtableServer, None]:
     server = AirtableServer('some_key')
     records = [
@@ -267,7 +268,7 @@ async def server(dt_str: str) -> AsyncGenerator[AirtableServer, None]:
     await server.stop()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
     airtable = Airtable('some_key', server.connector)
     yield airtable
