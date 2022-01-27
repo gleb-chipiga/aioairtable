@@ -39,9 +39,9 @@ setup(
     ],
     packages=['aioairtable'],
     package_data={'aioairtable': ['py.typed']},
-    python_requires='>=3.8',
+    python_requires='>=3.8,<3.11',
     install_requires=['aiohttp', 'multidict', 'yarl', 'backoff',
-                      'aiofreqlimit>=0.0.7'],
+                      'backoff-stubs', 'aiofreqlimit>=0.0.7'],
     tests_require=['pytest', 'pytest-asyncio', 'pytest-mock', 'pytest-cov',
                    'hypothesis', 'attrs']
 )
