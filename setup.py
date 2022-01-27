@@ -24,8 +24,9 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
         'License :: OSI Approved :: MIT License',
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Operating System :: POSIX',
         'Operating System :: MacOS :: MacOS X',
         'Operating System :: Microsoft :: Windows',
@@ -41,6 +42,6 @@ setup(
     python_requires='>=3.8',
     install_requires=['aiohttp', 'multidict', 'yarl', 'backoff',
                       'aiofreqlimit>=0.0.7'],
-    tests_require=['pytest', 'pytest-asyncio', 'pytest-mock', 'hypothesis',
-                   'attrs']
+    tests_require=['pytest', 'pytest-asyncio', 'pytest-mock', 'pytest-cov',
+                   'hypothesis', 'attrs']
 )
