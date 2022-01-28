@@ -5,7 +5,7 @@ mypy:
 	mypy --strict .
 
 isort:
-	isort aioairtable tests setup.py
+	isort -s .env -s .tox .
 
 coverage:
 	COVERAGE_FILE=.coverage/.coverage python -m pytest --cov=aioairtable --cov-report term --cov-report html:.coverage tests
