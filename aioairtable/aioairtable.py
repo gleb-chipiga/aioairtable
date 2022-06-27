@@ -106,7 +106,7 @@ def parse_dt(string: str) -> datetime:
 
 def backoff_wait_gen() -> Generator[float, None, None]:
     for value in backoff.expo():
-        yield AT_WAIT + value
+        yield AT_WAIT + (value if value else 0)
 
 
 def backoff_giveup(exception: Exception) -> bool:
