@@ -5,7 +5,7 @@ from setuptools import setup  # type: ignore
 
 path = Path(__file__).parent
 txt = (path / "aioairtable" / "__init__.py").read_text("utf-8")
-version = re.findall(r"^__version__ = '([^']+)'\r?$", txt, re.M)[0]
+version = re.findall(r"^__version__ = \"([^\"]+)\"\r?$", txt, re.M)[0]
 readme = (path / "README.rst").read_text("utf-8")
 
 setup(
