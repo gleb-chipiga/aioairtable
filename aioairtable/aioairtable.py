@@ -3,8 +3,21 @@ from datetime import datetime, timezone
 from enum import Enum, IntEnum, unique
 from json import loads as json_loads
 from types import TracebackType
-from typing import (Any, AsyncIterator, Final, Generator, Iterable, List,
-                    Literal, Mapping, Optional, Tuple, Type, TypedDict, Union)
+from typing import (
+    Any,
+    AsyncIterator,
+    Final,
+    Generator,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    TypedDict,
+    Union,
+)
 
 import backoff
 from aiofreqlimit import FreqLimit
@@ -14,16 +27,28 @@ from yarl import URL
 
 from .helpers import get_software, json_dumps
 
-__all__ = ('DT_FORMAT', 'Method', 'Fields', 'Thumbnail', 'Attachment',
-           'RequestAttachment', 'Collaborator', 'SortDirection', 'CellFormat',
-           'parse_dt', 'Airtable', 'AirtableBase', 'AirtableTable',
-           'AirtableRecord')
+__all__ = (
+    "DT_FORMAT",
+    "Method",
+    "Fields",
+    "Thumbnail",
+    "Attachment",
+    "RequestAttachment",
+    "Collaborator",
+    "SortDirection",
+    "CellFormat",
+    "parse_dt",
+    "Airtable",
+    "AirtableBase",
+    "AirtableTable",
+    "AirtableRecord",
+)
 
 SOFTWARE: Final[str] = get_software()
-API_URL: Final[URL] = URL('https://api.airtable.com/v0')
+API_URL: Final[URL] = URL("https://api.airtable.com/v0")
 AT_INTERVAL: Final[float] = 1 / 5
 AT_WAIT: Final[float] = 30
-DT_FORMAT: Final[str] = '%Y-%m-%dT%H:%M:%S.000Z'
+DT_FORMAT: Final[str] = "%Y-%m-%dT%H:%M:%S.000Z"
 
 
 @unique
@@ -34,10 +59,10 @@ class BackoffCodes(IntEnum):
     GATEWAY_TIMEOUT = 504
 
 
-Method = Literal['GET', 'POST', 'PATCH', 'DELETE']
+Method = Literal["GET", "POST", "PATCH", "DELETE"]
 Fields = Mapping[str, Any]
 
-logger = logging.getLogger('airtable')
+logger = logging.getLogger("airtable")
 
 
 class Record(TypedDict):
@@ -91,13 +116,13 @@ class Collaborator(TypedDict):
 
 
 class SortDirection(str, Enum):
-    ASC = 'asc'
-    DESC = 'desc'
+    ASC = "asc"
+    DESC = "desc"
 
 
 class CellFormat(str, Enum):
-    JSON = 'json'
-    STRING = 'string'
+    JSON = "json"
+    STRING = "string"
 
 
 def parse_dt(string: str) -> datetime:
@@ -120,42 +145,47 @@ def backoff_giveup(exception: Exception) -> bool:
 
 
 def build_repr(class_name: str, **kwargs: Any) -> str:
-    args = ', '.join(f'{key}={value!r}' for key, value in kwargs.items())
-    return f'{class_name}({args})'
+    args = ", ".join(f"{key}={value!r}" for key, value in kwargs.items())
+    return f"{class_name}({args})"
 
 
 class Airtable:
-
     def __init__(
         self, api_key: str, connector: Optional[BaseConnector] = None
     ) -> None:
-        self._auth_headers = {'Authorization': f'Bearer {api_key}'}
+        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
         self._client = ClientSession(
-            connector=connector, headers={'User-Agent': SOFTWARE},
-            json_serialize=json_dumps, raise_for_status=True)
+            connector=connector,
+            headers={"User-Agent": SOFTWARE},
+            json_serialize=json_dumps,
+            raise_for_status=True,
+        )
         self._freq_limit = FreqLimit(AT_INTERVAL)
 
     def __repr__(self) -> str:
-        return build_repr('Airtable', api_key='...')
+        return build_repr("Airtable", api_key="...")
 
     @property
     def client(self) -> ClientSession:
         return self._client
 
-    async def _request(self, method: Method, url: URL,
-                       json: Any = None) -> Any:
+    async def _request(
+        self, method: Method, url: URL, json: Any = None
+    ) -> Any:
         async with self._client.request(
             method, url, headers=self._auth_headers, json=json
         ) as response:
-            logger.debug('Request %s %s %r', method, url.human_repr(), json)
+            logger.debug("Request %s %s %r", method, url.human_repr(), json)
             response_data = json_loads(await response.read())
-            logger.debug('Response %r', response_data)
+            logger.debug("Response %r", response_data)
             return response_data
 
-    @backoff.on_exception(backoff_wait_gen, ClientResponseError,
-                          giveup=backoff_giveup)
-    async def request(self, base_id: str, method: Method, url: URL,
-                      json: Any = None) -> Any:
+    @backoff.on_exception(
+        backoff_wait_gen, ClientResponseError, giveup=backoff_giveup
+    )
+    async def request(
+        self, base_id: str, method: Method, url: URL, json: Any = None
+    ) -> Any:
         async with self._freq_limit.resource(base_id):
             return await self._request(method, url, json=json)
 
@@ -163,28 +193,31 @@ class Airtable:
         await self._client.close()
         await self._freq_limit.clear()
 
-    def base(self, base_id: str) -> 'AirtableBase':
+    def base(self, base_id: str) -> "AirtableBase":
         return AirtableBase(base_id, self)
 
-    async def __aenter__(self) -> 'Airtable':
+    async def __aenter__(self) -> "Airtable":
         return self
 
-    async def __aexit__(self, exc_type: Optional[Type[BaseException]],
-                        exc_val: Optional[BaseException],
-                        exc_tb: Optional[TracebackType]) -> None:
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         await self.close()
 
 
 class AirtableBase:
-
     def __init__(self, base_id: str, airtable: Airtable) -> None:
         self._airtable: Final[Airtable] = airtable
         self._id: Final[str] = base_id
         self._url: Final[URL] = API_URL / base_id
 
     def __repr__(self) -> str:
-        return build_repr('AirtableBase', base_id=self._id,
-                          airtable=self._airtable)
+        return build_repr(
+            "AirtableBase", base_id=self._id, airtable=self._airtable
+        )
 
     @property
     def id(self) -> str:
@@ -197,20 +230,20 @@ class AirtableBase:
     async def request(self, method: Method, url: URL, json: Any = None) -> Any:
         return await self._airtable.request(self._id, method, url, json=json)
 
-    def table(self, table_name: str) -> 'AirtableTable':
+    def table(self, table_name: str) -> "AirtableTable":
         return AirtableTable(table_name, self)
 
 
 class AirtableTable:
-
     def __init__(self, table_name: str, base: AirtableBase) -> None:
         self._name: Final[str] = table_name
         self._base: Final[AirtableBase] = base
         self._url: Final[URL] = base.url / table_name
 
     def __repr__(self) -> str:
-        return build_repr('AirtableTable', table_name=self._name,
-                          base=self._base)
+        return build_repr(
+            "AirtableTable", table_name=self._name, base=self._base
+        )
 
     @property
     def name(self) -> str:
@@ -224,8 +257,9 @@ class AirtableTable:
     def base(self) -> AirtableBase:
         return self._base
 
-    async def _request(self, method: Method, url: URL,
-                       json: Any = None) -> Any:
+    async def _request(
+        self, method: Method, url: URL, json: Any = None
+    ) -> Any:
         return await self._base.request(method, url, json=json)
 
     async def list_records(
@@ -240,37 +274,40 @@ class AirtableTable:
         cell_format: Optional[CellFormat] = None,
         time_zone: Optional[str] = None,
         user_locale: Optional[str] = None,
-        offset: Optional[str] = None
-    ) -> Tuple[Tuple['AirtableRecord', ...], Optional[str]]:
+        offset: Optional[str] = None,
+    ) -> Tuple[Tuple["AirtableRecord", ...], Optional[str]]:
         params: MultiDict[Union[int, str]] = MultiDict()
         if fields is not None:
-            params.extend(('fields[]', fields) for fields in fields)
+            params.extend(("fields[]", fields) for fields in fields)
         if filter_by_formula is not None:
-            params.add('filterByFormula', filter_by_formula)
+            params.add("filterByFormula", filter_by_formula)
         if max_records is not None:
-            params.add('maxRecords', max_records)
+            params.add("maxRecords", max_records)
         if page_size is not None:
-            params.add('pageSize', page_size)
+            params.add("pageSize", page_size)
         if sort is not None:
             for index, (field, direction) in enumerate(sort):
-                params.add(f'sort[{index}][field]', field)
-                params.add(f'sort[{index}][direction]', direction.value)
+                params.add(f"sort[{index}][field]", field)
+                params.add(f"sort[{index}][direction]", direction.value)
         if view is not None:
-            params.add('view', view)
+            params.add("view", view)
         if cell_format is not None:
-            params.add('cellFormat', cell_format.value)
+            params.add("cellFormat", cell_format.value)
         if time_zone is not None:
-            params.add('timeZone', time_zone)
+            params.add("timeZone", time_zone)
         if user_locale is not None:
-            params.add('userLocale', user_locale)
+            params.add("userLocale", user_locale)
         if offset is not None:
-            params.add('offset', offset)
+            params.add("offset", offset)
         url = self._url.with_query(params)
-        record_list: RecordList = await self._request('GET', url)
-        records = tuple(AirtableRecord(record['id'], record['fields'],
-                                       record['createdTime'], self)
-                        for record in record_list['records'])
-        return records, record_list.get('offset')
+        record_list: RecordList = await self._request("GET", url)
+        records = tuple(
+            AirtableRecord(
+                record["id"], record["fields"], record["createdTime"], self
+            )
+            for record in record_list["records"]
+        )
+        return records, record_list.get("offset")
 
     async def iter_records(
         self,
@@ -283,8 +320,8 @@ class AirtableTable:
         view: Optional[str] = None,
         cell_format: Optional[CellFormat] = None,
         time_zone: Optional[str] = None,
-        user_locale: Optional[str] = None
-    ) -> AsyncIterator['AirtableRecord']:
+        user_locale: Optional[str] = None,
+    ) -> AsyncIterator["AirtableRecord"]:
         offset: Optional[str] = None
         while True:
             records, offset = await self.list_records(
@@ -297,29 +334,36 @@ class AirtableTable:
                 cell_format=cell_format,
                 time_zone=time_zone,
                 user_locale=user_locale,
-                offset=offset
+                offset=offset,
             )
             for record in records:
                 yield record
             if offset is None:
                 break
 
-    async def retrieve_record(self, record_id: str) -> 'AirtableRecord':
-        record: Record = await self._request('GET', self._url / record_id)
-        return AirtableRecord(record['id'], record['fields'],
-                              record['createdTime'], self)
+    async def retrieve_record(self, record_id: str) -> "AirtableRecord":
+        record: Record = await self._request("GET", self._url / record_id)
+        return AirtableRecord(
+            record["id"], record["fields"], record["createdTime"], self
+        )
 
-    async def create_record(self, fields: Fields) -> 'AirtableRecord':
-        record: Record = await self._request('POST', self._url,
-                                             json={'fields': fields})
-        return AirtableRecord(record['id'], record['fields'],
-                              record['createdTime'], self)
+    async def create_record(self, fields: Fields) -> "AirtableRecord":
+        record: Record = await self._request(
+            "POST", self._url, json={"fields": fields}
+        )
+        return AirtableRecord(
+            record["id"], record["fields"], record["createdTime"], self
+        )
 
 
 class AirtableRecord:
-
-    def __init__(self, record_id: str, fields: Fields, created_time: str,
-                 table: AirtableTable) -> None:
+    def __init__(
+        self,
+        record_id: str,
+        fields: Fields,
+        created_time: str,
+        table: AirtableTable,
+    ) -> None:
         self._table: Final[AirtableTable] = table
         self._id: Final[str] = record_id
         self._url: Final[URL] = table.url / record_id
@@ -328,9 +372,13 @@ class AirtableRecord:
         self._deleted: bool = False
 
     def __repr__(self) -> str:
-        return build_repr('AirtableRecord', record_id=self._id,
-                          fields=self._fields, created_time=self._created_time,
-                          table=self._table)
+        return build_repr(
+            "AirtableRecord",
+            record_id=self._id,
+            fields=self._fields,
+            created_time=self._created_time,
+            table=self._table,
+        )
 
     @property
     def id(self) -> str:
@@ -352,21 +400,23 @@ class AirtableRecord:
     def table(self) -> AirtableTable:
         return self._table
 
-    async def _request(self, method: Method, url: URL,
-                       json: Any = None) -> Any:
+    async def _request(
+        self, method: Method, url: URL, json: Any = None
+    ) -> Any:
         return await self._table.base.request(method, url, json=json)
 
     async def update(self, fields: Fields) -> Fields:
         if self._deleted:
-            raise RuntimeError('Record is deleted')
-        record: Record = await self._request('PATCH', self._url,
-                                             json={'fields': fields})
-        self._fields = record['fields']
-        return record['fields']
+            raise RuntimeError("Record is deleted")
+        record: Record = await self._request(
+            "PATCH", self._url, json={"fields": fields}
+        )
+        self._fields = record["fields"]
+        return record["fields"]
 
     async def delete(self) -> bool:
         if self._deleted:
-            raise RuntimeError('Record is already deleted')
-        record: DeletedRecord = await self._request('DELETE', self._url)
-        self._deleted = record['deleted']
-        return record['deleted']
+            raise RuntimeError("Record is already deleted")
+        record: DeletedRecord = await self._request("DELETE", self._url)
+        self._deleted = record["deleted"]
+        return record["deleted"]
