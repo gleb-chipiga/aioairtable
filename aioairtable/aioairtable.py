@@ -130,7 +130,9 @@ def parse_dt(string: str) -> datetime:
 
 
 def backoff_wait_gen() -> Generator[float, None, None]:
-    for value in backoff.expo():
+    expo_gen = backoff.expo()
+    yield expo_gen.send(None)
+    for value in expo_gen:
         yield AT_WAIT + value
 
 

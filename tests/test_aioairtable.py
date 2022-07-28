@@ -355,7 +355,9 @@ def test_parse_dt_error(string: str) -> None:
 
 
 def test_backoff_wait_gen() -> None:
-    for value, i in zip(aat.backoff_wait_gen(), range(16)):
+    wait_gen = aat.backoff_wait_gen()
+    wait_gen.send(None)
+    for value, i in zip(wait_gen, range(16)):
         assert value == aat.AT_WAIT + 2**i
 
 

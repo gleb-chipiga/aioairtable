@@ -44,8 +44,7 @@ setup(
         "aiohttp",
         "multidict",
         "yarl",
-        "backoff<=1.11",
-        "backoff-stubs",
+        "backoff>=2",
         "aiofreqlimit>=0.0.7",
     ],
     tests_require=[
