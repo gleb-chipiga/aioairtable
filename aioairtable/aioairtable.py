@@ -37,8 +37,8 @@ __all__ = (
     "CellFormat",
     "Collaborator",
     "Method",
+    "NewAttachment",
     "RecordList",
-    "RequestAttachment",
     "SortDirection",
     "Thumbnail",
 )
@@ -91,7 +91,7 @@ class Thumbnail(Struct, frozen=True):
     height: int
 
 
-class RequestAttachment(Struct, frozen=True, omit_defaults=True):
+class NewAttachment(Struct, frozen=True, omit_defaults=True):
     url: str
     filename: str | None = None
 

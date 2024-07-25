@@ -9,7 +9,7 @@ from .aioairtable import (
     CellFormat,
     Collaborator,
     Method,
-    RequestAttachment,
+    NewAttachment,
     SortDirection,
     Thumbnail,
 )
@@ -23,7 +23,7 @@ __all__ = (
     "CellFormat",
     "Collaborator",
     "Method",
-    "RequestAttachment",
+    "NewAttachment",
     "SortDirection",
     "Thumbnail",
     "__version__",
