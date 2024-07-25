@@ -125,11 +125,11 @@ class CellFormat(StrEnum):
     STRING = "string"
 
 
-def backoff_wait_gen() -> Generator[float, None, None]:
+def backoff_wait_gen(at_wait: float) -> Generator[float, Any, None]:
     expo_gen = backoff.expo()
     yield expo_gen.send(None)
     for value in expo_gen:
-        yield AT_WAIT + value
+        yield at_wait + value
 
 
 def backoff_giveup(exception: Exception) -> bool:
@@ -202,6 +202,7 @@ class Airtable:
         backoff_wait_gen,
         ClientResponseError,
         giveup=backoff_giveup,
+        at_wait=AT_WAIT,
     )
     async def request(
         self,

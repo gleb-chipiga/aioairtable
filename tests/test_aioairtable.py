@@ -18,6 +18,7 @@ from typing import (
     runtime_checkable,
 )
 
+import backoff
 import pytest
 import pytest_asyncio
 from aiohttp import (
@@ -57,6 +58,8 @@ from aioairtable.aioairtable import (
     CellFormat,
     RecordList,
     SortDirection,
+    backoff_giveup,
+    backoff_wait_gen,
 )
 
 DT_FORMAT: Final = "%Y-%m-%dT%H:%M:%S.000Z"
@@ -369,10 +372,38 @@ async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
 
 
 def test_backoff_wait_gen() -> None:
-    wait_gen = aat.backoff_wait_gen()
+    wait_gen = aat.backoff_wait_gen(aat.AT_WAIT)
     wait_gen.send(None)
     for value, i in zip(wait_gen, range(16)):
         assert value == aat.AT_WAIT + 2**i
+
+
+@pytest.mark.asyncio
+async def test_backoff() -> None:
+    class TestClient:
+
+        def __init__(self) -> None:
+            self.first_attempt = True
+
+        @backoff.on_exception(
+            backoff_wait_gen,
+            ClientResponseError,
+            giveup=backoff_giveup,
+            at_wait=0.01,
+        )
+        async def request(self) -> None:
+            if self.first_attempt:
+                self.first_attempt = False
+                raise client_response_error(429)
+            else:
+                raise client_response_error(430)
+
+    tc = TestClient()
+    with pytest.raises(ClientResponseError) as exc_info:
+        await tc.request()
+    assert exc_info.type is ClientResponseError
+    assert exc_info.value.status == 430
+    assert not tc.first_attempt
 
 
 def client_response_error(status: int) -> ClientResponseError:
