@@ -14,11 +14,14 @@ flake8:
 mypy:
     mypy --strict .
 
+pyright:
+    pyright
+
 coverage:
     COVERAGE_FILE=.coverage/.coverage python -m pytest --cov=aioairtable \
       --cov-report term --cov-report html:.coverage tests
 
-all: isort sort-all black flake8 mypy coverage
+all: isort sort-all black flake8 mypy pyright coverage
 
 build:
     if [ -d dist ]; then rm -rf dist; fi
