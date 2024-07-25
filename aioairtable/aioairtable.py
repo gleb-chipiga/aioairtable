@@ -43,10 +43,10 @@ __all__ = (
     "Thumbnail",
 )
 
-SOFTWARE: Final[str] = get_software()
-API_URL: Final[URL] = URL("https://api.airtable.com/v0")
-AT_INTERVAL: Final[float] = 1 / 5
-AT_WAIT: Final[float] = 30
+SOFTWARE: Final = get_software()
+API_URL: Final = URL("https://api.airtable.com/v0")
+AT_INTERVAL: Final = 1 / 5
+AT_WAIT: Final = 30.0
 
 
 @unique
