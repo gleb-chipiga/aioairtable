@@ -2,6 +2,18 @@
 Asynchronous client library for Airtable API
 ============================================
 
+.. image:: https://badge.fury.io/py/aioairtable.svg
+   :target: https://pypi.org/project/aioairtable
+   :alt: Latest PyPI package version
+
+.. image:: https://img.shields.io/badge/license-MIT-blue.svg
+   :target: https://github.com/gleb-chipiga/aioairtable/blob/master/LICENSE
+   :alt: License
+
+.. image:: https://img.shields.io/pypi/dm/aioairtable
+   :target: https://pypistats.org/packages/aioairtable
+   :alt: Downloads count
+
 Key Features
 ============
 
