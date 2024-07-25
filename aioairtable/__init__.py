@@ -1,7 +1,6 @@
 __version__ = "0.0.19"
 
 from .aioairtable import (
-    DT_FORMAT,
     Airtable,
     AirtableBase,
     AirtableRecord,
@@ -9,7 +8,6 @@ from .aioairtable import (
     Attachment,
     CellFormat,
     Collaborator,
-    Fields,
     Method,
     RequestAttachment,
     SortDirection,
@@ -17,18 +15,16 @@ from .aioairtable import (
 )
 
 __all__ = (
-    "__version__",
-    "DT_FORMAT",
-    "Method",
-    "Fields",
-    "Thumbnail",
-    "Attachment",
-    "RequestAttachment",
-    "Collaborator",
-    "SortDirection",
-    "CellFormat",
     "Airtable",
     "AirtableBase",
-    "AirtableTable",
     "AirtableRecord",
+    "AirtableTable",
+    "Attachment",
+    "CellFormat",
+    "Collaborator",
+    "Method",
+    "RequestAttachment",
+    "SortDirection",
+    "Thumbnail",
+    "__version__",
 )

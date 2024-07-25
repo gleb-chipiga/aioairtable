@@ -45,6 +45,7 @@ setup(
         "yarl",
         "backoff>=2",
         "aiofreqlimit>=0.0.7",
+        "msgspec",
     ],
     tests_require=[
         "pytest",
@@ -52,6 +53,5 @@ setup(
         "pytest-mock",
         "pytest-cov",
         "hypothesis",
-        "attrs",
     ],
 )

@@ -1,24 +1,23 @@
 import asyncio
 import os
 import re
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime, timezone
 from tempfile import mkdtemp
 from typing import (
     Any,
     AsyncGenerator,
     Awaitable,
     Callable,
-    Dict,
     Final,
-    List,
+    Mapping,
     Optional,
     Protocol,
-    Tuple,
+    TypedDict,
     cast,
     runtime_checkable,
 )
 
-import attr
 import pytest
 import pytest_asyncio
 from aiohttp import (
@@ -45,6 +44,7 @@ from aiohttp.web import (
 )
 from hypothesis import given
 from hypothesis.strategies import integers
+from msgspec import Struct
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
@@ -55,12 +55,32 @@ from aioairtable.aioairtable import (
     AirtableRecord,
     AirtableTable,
     CellFormat,
+    RecordList,
     SortDirection,
-    parse_dt,
 )
 
+DT_FORMAT: Final = "%Y-%m-%dT%H:%M:%S.000Z"
 
-@attr.s(auto_attribs=True, frozen=True)
+
+def parse_dt(string: str) -> datetime:
+    return datetime.strptime(string, DT_FORMAT).replace(tzinfo=timezone.utc)
+
+
+Fields = Mapping[str, Any]
+
+
+class Record(TypedDict):
+    id: str
+    fields: Fields
+    createdTime: str
+
+
+class DeletedRecord(TypedDict):
+    id: str
+    deleted: bool
+
+
+@dataclass(frozen=True)
 class RequestData:
     method: str
     url: URL
@@ -72,12 +92,11 @@ Handler = Callable[[Request], Awaitable[StreamResponse]]
 
 @runtime_checkable
 class SupportsLessThan(Protocol):
-    def __lt__(self, other: Any) -> bool:
-        ...
+    def __lt__(self, other: Any) -> bool: ...
 
 
-def fields_sort_key(field: str) -> Callable[[aat.Record], SupportsLessThan]:
-    def _fields_sort_key(record: aat.Record) -> SupportsLessThan:
+def fields_sort_key(field: str) -> Callable[[Record], SupportsLessThan]:
+    def _fields_sort_key(record: Record) -> SupportsLessThan:
         if not isinstance(record["fields"][field], SupportsLessThan):
             raise HTTPBadRequest(reason=f'"{field}" type not sortable')
         return cast(SupportsLessThan, record["fields"][field])
@@ -88,21 +107,27 @@ def fields_sort_key(field: str) -> Callable[[aat.Record], SupportsLessThan]:
 class AirtableServer:
     def __init__(self, api_key: str) -> None:
         self._started: bool = False
-        self._tmp_dir: Optional[str] = None
-        self._connector: Optional[UnixConnector] = None
+        self._tmp_dir: str | None = None
+        self._connector: UnixConnector | None = None
         self._loop = asyncio.get_running_loop()
-        self._tables: Dict[Tuple[str, str], List[aat.Record]] = {}
-        self._requests: List[RequestData] = []
-        self._api_key: Final[str] = api_key
+        self._tables: dict[tuple[str, str], list[Record]] = {}
+        self._requests: list[RequestData] = []
+        self._api_key: Final = api_key
         application = Application(middlewares=(self._auth, self._log))
         application.router.add_routes(
             (
-                get("/v0/{base_id}/{table_name}", self.list_records),
+                get(
+                    "/v0/{base_id}/{table_name}",
+                    self.list_records,
+                ),
                 get(
                     "/v0/{base_id}/{table_name}/{record_id}",
                     self.retrieve_record,
                 ),
-                post("/v0/{base_id}/{table_name}", self.create_record),
+                post(
+                    "/v0/{base_id}/{table_name}",
+                    self.create_record,
+                ),
                 patch(
                     "/v0/{base_id}/{table_name}/{record_id}",
                     self.update_record,
@@ -117,7 +142,9 @@ class AirtableServer:
 
     @middleware
     async def _auth(
-        self, request: Request, handler: Handler
+        self,
+        request: Request,
+        handler: Handler,
     ) -> StreamResponse:
         if "Authorization" not in request.headers:
             raise HTTPBadRequest(reason="Authorization header absent")
@@ -128,23 +155,30 @@ class AirtableServer:
         return await handler(request)
 
     @middleware
-    async def _log(self, request: Request, handler: Handler) -> StreamResponse:
+    async def _log(
+        self,
+        request: Request,
+        handler: Handler,
+    ) -> StreamResponse:
         url = request.url.with_scheme("https")
         has_data = request.method in ("POST", "PATCH")
         data = await request.json() if has_data else None
         self._requests.append(RequestData(request.method, url, data))
         return await handler(request)
 
-    def requests(self) -> List[RequestData]:
+    def requests(self) -> list[RequestData]:
         return self._requests.copy()
 
     def add_records(
-        self, base_id: str, table_name: str, records: List[aat.Record]
+        self,
+        base_id: str,
+        table_name: str,
+        records: list[Record],
     ) -> None:
         if (base_id, table_name) in self._tables:
             fields_keys = self._tables[base_id, table_name][0]["fields"].keys()
             assert all(
-                fields_keys == record["fields"].keys() for record in records
+                record["fields"].keys() == fields_keys for record in records
             )
             self._tables[base_id, table_name].extend(records)
         else:
@@ -161,6 +195,7 @@ class AirtableServer:
     async def stop(self) -> None:
         if not self._started:
             raise RuntimeError("Server not started")
+        assert self._tmp_dir is not None
         await self._runner.cleanup()
         await self._loop.run_in_executor(None, os.remove, self._socket_path)
         await self._loop.run_in_executor(None, os.rmdir, self._tmp_dir)
@@ -181,7 +216,7 @@ class AirtableServer:
         table_name = request.match_info["table_name"]
         if (base_id, table_name) not in self._tables:
             raise HTTPNotFound(reason="Table not found")
-        sort: Dict[int, Dict[str, str]] = {}
+        sort: dict[int, dict[str, str]] = {}
         for key in request.query:
             if (
                 not key.startswith("fields")
@@ -253,8 +288,8 @@ class AirtableServer:
         base_id = request.match_info["base_id"]
         table_name = request.match_info["table_name"]
         fields = (await request.json())["fields"]
-        created_time = datetime.now().strftime(aat.DT_FORMAT)
-        record = aat.Record(
+        created_time = datetime.now().strftime(DT_FORMAT)
+        record = Record(
             id=f"record{self._loop.time()}",
             fields=fields,
             createdTime=created_time,
@@ -288,7 +323,7 @@ class AirtableServer:
         for index, record in enumerate(table.copy()):
             if record["id"] == record_id:
                 table.pop(index)
-                deleted_record = aat.DeletedRecord(id=record_id, deleted=True)
+                deleted_record = DeletedRecord(id=record_id, deleted=True)
                 return json_response(deleted_record)
         else:
             raise HTTPNotFound()
@@ -302,14 +337,14 @@ def url() -> URL:
 
 @pytest_asyncio.fixture
 def dt_str() -> str:
-    return datetime.now().strftime(aat.DT_FORMAT)
+    return datetime.now().strftime(DT_FORMAT)
 
 
 @pytest_asyncio.fixture
 async def server(dt_str: str) -> AsyncGenerator[AirtableServer, None]:
     server = AirtableServer("some_key")
     records = [
-        aat.Record(
+        Record(
             id=f"record{index:03d}",
             fields={
                 "field_1": f"value_1_{index:03d}",
@@ -331,27 +366,6 @@ async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
     airtable = Airtable("some_key", server.connector)
     yield airtable
     await airtable.close()
-
-
-def test_parse_dt() -> None:
-    string = "2020-12-06T13:45:55.000Z"
-    dt = datetime(2020, 12, 6, 13, 45, 55, tzinfo=timezone.utc)
-    assert parse_dt(string) == dt
-
-
-@pytest.mark.parametrize(
-    "string",
-    (
-        "2020-12-06T13:45:55.000",
-        "2020-12-06T13:45:55",
-        "2020-12-06 13:45:55",
-        "2020-12-06",
-        "some string",
-    ),
-)
-def test_parse_dt_error(string: str) -> None:
-    with pytest.raises(ValueError, match="time data"):
-        parse_dt(string)
 
 
 def test_backoff_wait_gen() -> None:
@@ -402,21 +416,37 @@ async def test_airtable_client(
 
 @pytest.mark.asyncio
 async def test_airtable_underscore_request(
-    server: AirtableServer, airtable: Airtable, url: URL
+    server: AirtableServer,
+    airtable: Airtable,
+    url: URL,
 ) -> None:
-    assert await airtable._request("GET", url) == {"records": []}
+    assert await airtable._request("GET", url, RecordList) == RecordList(
+        records=()
+    )
     assert server.requests() == [RequestData("GET", url, None)]
 
 
 @pytest.mark.asyncio
 async def test_airtable_request(
-    server: AirtableServer, airtable: Airtable, url: URL
+    server: AirtableServer,
+    airtable: Airtable,
+    url: URL,
 ) -> None:
     loop = asyncio.get_running_loop()
     time1 = loop.time()
-    assert await airtable.request("base_id", "GET", url) == {"records": []}
+    assert await airtable.request(
+        "base_id",
+        "GET",
+        url,
+        RecordList,
+    ) == RecordList(records=())
     assert server.requests() == [RequestData("GET", url, None)]
-    assert await airtable.request("base_id", "GET", url) == {"records": []}
+    assert await airtable.request(
+        "base_id",
+        "GET",
+        url,
+        RecordList,
+    ) == RecordList(records=())
     time2 = loop.time()
     assert time2 - time1 >= aat.AT_INTERVAL
     assert server.requests() == [
@@ -472,14 +502,18 @@ async def test_airtable_base_request(
     server: AirtableServer, airtable: Airtable, url: URL
 ) -> None:
     base = airtable.base("base_id")
-    assert await base.request("GET", url) == {"records": []}
+    assert await base.request("GET", url, RecordList) == RecordList(records=())
     assert server.requests() == [RequestData("GET", url, None)]
+
+
+class S(Struct):
+    pass
 
 
 @pytest.mark.asyncio
 async def test_airtable_base_table(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table")
+    table = base.table("some_table", Struct)
     assert isinstance(table, AirtableTable)
     assert table.name == "some_table"
     assert table.url == base.url / "some_table"
@@ -488,20 +522,32 @@ async def test_airtable_base_table(airtable: Airtable) -> None:
 
 @pytest.mark.asyncio
 async def test_airtable_table_request(
-    server: AirtableServer, airtable: Airtable, url: URL
+    server: AirtableServer,
+    airtable: Airtable,
+    url: URL,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
-    assert await table._request("GET", url) == {"records": []}
+    table = base.table("table_name", Struct)
+    assert await table._request("GET", url, RecordList) == RecordList(
+        records=()
+    )
     assert server.requests() == [RequestData("GET", url, None)]
+
+
+class F(Struct):
+    field_1: str | None = None
+    field_2: str | None = None
+    field_3: str | None = None
 
 
 @pytest.mark.asyncio
 async def test_airtable_table_list_records(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
+    table = base.table("table_name", F)
     records, offset = await table.list_records(
         fields=("field_1", "field_2"),
         filter_by_formula="{field_3}",
@@ -542,9 +588,9 @@ async def test_airtable_table_list_records(
     for index, record in enumerate(records, start=34):
         assert isinstance(record, AirtableRecord)
         assert record.id == f"record{index:03d}"
-        assert record.fields["field_1"] == f"value_1_{index:03d}"
-        assert record.fields["field_2"] == f"value_2_{index:03d}"
-        assert "field_3" not in record.fields
+        assert record.fields.field_1 == f"value_1_{index:03d}"
+        assert record.fields.field_2 == f"value_2_{index:03d}"
+        assert record.fields.field_3 is None
         assert record.created_time == parse_dt(dt_str)
         assert record.table == table
     assert offset == "record036"
@@ -552,23 +598,27 @@ async def test_airtable_table_list_records(
 
 @pytest.mark.asyncio
 async def test_airtable_table_iter_records(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
+    table = base.table("table_name", F)
     records = [
         record
         async for record in table.iter_records(
-            fields=["field_1"], max_records=6, page_size=3
+            fields=["field_1"],
+            max_records=6,
+            page_size=3,
         )
     ]
     assert len(records) == 6
     for index, record in enumerate(records):
         isinstance(record, AirtableRecord)
         assert record.id == f"record{index:03d}"
-        assert record.fields["field_1"] == f"value_1_{index:03d}"
-        assert "field_2" not in record.fields
-        assert "field_3" not in record.fields
+        assert record.fields.field_1 == f"value_1_{index:03d}"
+        assert record.fields.field_2 is None
+        assert record.fields.field_3 is None
         assert record.created_time == parse_dt(dt_str)
         assert record.table == table
     assert server.requests() == [
@@ -600,45 +650,53 @@ async def test_airtable_table_iter_records(
 
 @pytest.mark.asyncio
 async def test_airtable_table_retrieve_record(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
+    table = base.table("table_name", F)
     record = await table.retrieve_record("record003")
     assert isinstance(record, AirtableRecord)
     assert record.id == "record003"
-    assert record.fields == {
-        "field_1": "value_1_003",
-        "field_2": "value_2_003",
-        "field_3": "value_3_003",
-    }
+    assert record.fields == F(
+        field_1="value_1_003",
+        field_2="value_2_003",
+        field_3="value_3_003",
+    )
     assert record.created_time == parse_dt(dt_str)
     assert record.table == table
     assert server.requests() == [
-        RequestData("GET", table.url / "record003", None)
+        RequestData(
+            "GET",
+            table.url / "record003",
+            None,
+        )
     ]
 
 
 @pytest.mark.asyncio
 async def test_airtable_table_create_record(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
+    table = base.table("table_name", F)
     record = await table.create_record(
-        {
-            "field_1": "value_1_new_001",
-            "field_2": "value_2_new_001",
-            "field_3": "value_3_new_001",
-        }
+        F(
+            field_1="value_1_new_001",
+            field_2="value_2_new_001",
+            field_3="value_3_new_001",
+        )
     )
     assert isinstance(record, AirtableRecord)
     assert isinstance(record.id, str)
-    assert record.fields == {
-        "field_1": "value_1_new_001",
-        "field_2": "value_2_new_001",
-        "field_3": "value_3_new_001",
-    }
+    assert record.fields == F(
+        field_1="value_1_new_001",
+        field_2="value_2_new_001",
+        field_3="value_3_new_001",
+    )
     assert record.created_time == parse_dt(dt_str)
     assert record.table == table
     assert server.requests() == [
@@ -657,41 +715,34 @@ async def test_airtable_table_create_record(
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_init(airtable: Airtable, dt_str: str) -> None:
-    base = airtable.base("some_base_id")
-    table = base.table("some_table")
-    record = AirtableRecord("record1", {}, dt_str, table)
-    assert isinstance(record, AirtableRecord)
-
-
-@pytest.mark.parametrize(
-    "string",
-    (
-        "2020-12-06T13:45:55.000",
-        "2020-12-06T13:45:55",
-        "2020-12-06 13:45:55",
-        "2020-12-06",
-        "some string",
-    ),
-)
-@pytest.mark.asyncio
-async def test_airtable_record_init_error(
-    airtable: Airtable, string: str
+async def test_airtable_record_init(
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table")
-    with pytest.raises(ValueError, match="time data"):
-        AirtableRecord("record1", {}, string, table)
+    table = base.table("some_table", Struct)
+    record = AirtableRecord(
+        "record1",
+        Struct(),
+        datetime.now(UTC),
+        table,
+    )
+    assert isinstance(record, AirtableRecord)
 
 
 @pytest.mark.asyncio
 async def test_airtable_record_repr(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table")
+    table = base.table("some_table", Struct)
     time_string = "2021-01-25T17:28:21.000Z"
-    record = AirtableRecord("record1", {}, time_string, table)
+    record = AirtableRecord(
+        "record1",
+        Struct(),
+        parse_dt(time_string),
+        table,
+    )
     assert repr(record) == (
-        "AirtableRecord(record_id='record1', fields={}, "
+        "AirtableRecord(record_id='record1', fields=Struct(), "
         "created_time=datetime.datetime(2021, 1, 25, 17, "
         "28, 21, tzinfo=datetime.timezone.utc), "
         "table=AirtableTable(table_name='some_table', "
@@ -701,45 +752,76 @@ async def test_airtable_record_repr(airtable: Airtable) -> None:
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_table(airtable: Airtable, dt_str: str) -> None:
+async def test_airtable_record_table(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table")
-    record = AirtableRecord("record1", {}, dt_str, table)
+    table = base.table("some_table", Struct)
+    record = AirtableRecord(
+        "record1",
+        Struct(),
+        datetime.now(UTC),
+        table,
+    )
     assert record.table == table
 
 
 @pytest.mark.asyncio
 async def test_airtable_record_request(
-    server: AirtableServer, airtable: Airtable, url: URL, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    url: URL,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
-    record = AirtableRecord("record000", {}, dt_str, table)
-    assert await record._request("GET", record.url) == aat.Record(
+    table = base.table("table_name", F)
+    f = F(
+        field_1="value_1_000",
+        field_2="value_2_000",
+        field_3="value_3_000",
+    )
+    record = AirtableRecord(
+        "record000",
+        f,
+        parse_dt(dt_str),
+        table,
+    )
+    assert await record._request(
+        "GET",
+        record.url,
+        aat.Record[F],
+    ) == aat.Record(
         id="record000",
-        fields={
-            "field_1": "value_1_000",
-            "field_2": "value_2_000",
-            "field_3": "value_3_000",
-        },
-        createdTime=dt_str,
+        fields=f,
+        created_time=parse_dt(dt_str),
     )
     assert server.requests() == [RequestData("GET", record.url, None)]
 
 
 @pytest.mark.asyncio
 async def test_airtable_record_update(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
-    record = AirtableRecord("record000", {}, dt_str, table)
-    fields = {
-        "field_1": "value_1_new_000",
-        "field_2": "value_2_new_000",
-        "field_3": "value_3_new_000",
-    }
-    assert await record.update(fields.copy()) == fields
+    table = base.table("table_name", F)
+    f1 = F(
+        field_1="value_1_000",
+        field_2="value_2_000",
+        field_3="value_3_000",
+    )
+    record = AirtableRecord(
+        "record000",
+        f1,
+        parse_dt(dt_str),
+        table,
+    )
+    f2 = F(
+        field_1="value_1_new_000",
+        field_2="value_2_new_000",
+        field_3="value_3_new_000",
+    )
+    await record.update(f2)
+    assert record.fields == f2
     assert server.requests() == [
         RequestData(
             "PATCH",
@@ -757,22 +839,24 @@ async def test_airtable_record_update(
 
 @pytest.mark.asyncio
 async def test_airtable_record_delete(
-    server: AirtableServer, airtable: Airtable, dt_str: str
+    server: AirtableServer,
+    airtable: Airtable,
+    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name")
-    record = AirtableRecord("record000", {}, dt_str, table)
-    assert await record.delete()
+    table = base.table("table_name", Struct)
+    record = AirtableRecord(
+        "record000",
+        Struct(),
+        datetime.now(UTC),
+        table,
+    )
+    await record.delete()
+    assert record.deleted
     assert server.requests() == [RequestData("DELETE", record.url, None)]
     with pytest.raises(RuntimeError, match="Record is already deleted"):
-        assert await record.delete()
+        await record.delete()
     assert server.requests() == [RequestData("DELETE", record.url, None)]
     with pytest.raises(RuntimeError, match="Record is deleted"):
-        assert await record.update(
-            {
-                "field_1": "value_1_new_000",
-                "field_2": "value_2_new_000",
-                "field_3": "value_3_new_000",
-            }
-        )
+        await record.update(Struct())
     assert server.requests() == [RequestData("DELETE", record.url, None)]
