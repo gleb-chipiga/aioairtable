@@ -93,6 +93,7 @@ class Thumbnail(Struct, frozen=True):
 
 class NewAttachment(Struct, frozen=True, omit_defaults=True):
     url: str
+    id: str | None = None
     filename: str | None = None
 
 
