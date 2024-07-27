@@ -59,7 +59,7 @@ Method = Literal["GET", "POST", "PATCH", "DELETE"]
 logger = logging.getLogger("airtable")
 
 
-class Fields(Struct, frozen=True, omit_defaults=True):
+class Fields(Struct, omit_defaults=True):
     pass
 
 

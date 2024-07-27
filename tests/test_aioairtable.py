@@ -585,7 +585,7 @@ async def test_airtable_table_request(
     assert server.requests() == [RequestData("GET", url, None)]
 
 
-class F(Fields, frozen=True):
+class F(Fields):
     field_1: str | None = None
     field_2: str | None = None
     field_3: str | None = None
