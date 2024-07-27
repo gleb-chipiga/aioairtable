@@ -10,12 +10,9 @@ from typing import (
     Generic,
     Iterable,
     Literal,
-    Optional,
     Self,
-    Tuple,
     Type,
     TypeVar,
-    Union,
 )
 
 import backoff
@@ -23,7 +20,7 @@ import msgspec.json
 from aiofreqlimit import FreqLimit
 from aiohttp import BaseConnector, ClientResponseError, ClientSession
 from msgspec import Struct, field
-from multidict import MultiDict
+from multidict import CIMultiDict, MultiDict
 from yarl import URL
 
 from .helpers import get_software
@@ -36,9 +33,9 @@ __all__ = (
     "Attachment",
     "CellFormat",
     "Collaborator",
+    "Fields",
     "Method",
     "NewAttachment",
-    "RecordList",
     "SortDirection",
     "Thumbnail",
 )
@@ -62,7 +59,11 @@ Method = Literal["GET", "POST", "PATCH", "DELETE"]
 logger = logging.getLogger("airtable")
 
 
-_T = TypeVar("_T", bound=Struct)
+class Fields(Struct, frozen=True, omit_defaults=True):
+    pass
+
+
+_T = TypeVar("_T", bound=Fields)
 
 
 class Record(Struct, Generic[_T], frozen=True):
@@ -157,10 +158,20 @@ class Airtable:
         api_key: str,
         connector: BaseConnector | None = None,
     ) -> None:
-        self._auth_headers = {"Authorization": f"Bearer {api_key}"}
+        self._headers: Final = CIMultiDict(
+            {
+                "User-Agent": SOFTWARE,
+                "Authorization": f"Bearer {api_key}",
+            }
+        )
+        self._json_headers: Final = CIMultiDict(
+            {
+                **self._headers,
+                **{"Content-Type": "application/json"},
+            }
+        )
         self._client = ClientSession(
             connector=connector,
-            headers={"User-Agent": SOFTWARE},
             raise_for_status=True,
         )
         self._freq_limit = FreqLimit(AT_INTERVAL)
@@ -182,7 +193,7 @@ class Airtable:
         async with self._client.request(
             method,
             url,
-            headers=self._auth_headers,
+            headers=self._headers if payload is None else self._json_headers,
             data=msgspec.json.encode(payload) if payload is not None else None,
         ) as client_response:
             logger.debug(
@@ -347,7 +358,7 @@ class AirtableTable(Generic[_T]):
         user_locale: str | None = None,
         offset: str | None = None,
     ) -> tuple[tuple["AirtableRecord[_T]", ...], str | None]:
-        params: MultiDict[Union[int, str]] = MultiDict()
+        params = MultiDict[int | str]()
         if fields is not None:
             params.extend(("fields[]", fields) for fields in fields)
         if filter_by_formula is not None:
@@ -391,17 +402,17 @@ class AirtableTable(Generic[_T]):
     async def iter_records(
         self,
         *,
-        fields: Optional[Iterable[str]] = None,
-        filter_by_formula: Optional[str] = None,
-        max_records: Optional[int] = None,
+        fields: Iterable[str] | None = None,
+        filter_by_formula: str | None = None,
+        max_records: int | None = None,
         page_size: int = 25,
-        sort: Optional[Iterable[Tuple[str, SortDirection]]] = None,
-        view: Optional[str] = None,
-        cell_format: Optional[CellFormat] = None,
-        time_zone: Optional[str] = None,
-        user_locale: Optional[str] = None,
+        sort: Iterable[tuple[str, SortDirection]] | None = None,
+        view: str | None = None,
+        cell_format: CellFormat | None = None,
+        time_zone: str | None = None,
+        user_locale: str | None = None,
     ) -> AsyncIterator["AirtableRecord[_T]"]:
-        offset: Optional[str] = None
+        offset: str | None = None
         while True:
             records, offset = await self.list_records(
                 fields=fields,

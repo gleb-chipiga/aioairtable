@@ -56,10 +56,8 @@ from aioairtable.aioairtable import (
     AirtableRecord,
     AirtableTable,
     CellFormat,
-    RecordList,
+    Fields,
     SortDirection,
-    backoff_giveup,
-    backoff_wait_gen,
 )
 
 DT_FORMAT: Final = "%Y-%m-%dT%H:%M:%S.000Z"
@@ -69,12 +67,12 @@ def parse_dt(string: str) -> datetime:
     return datetime.strptime(string, DT_FORMAT).replace(tzinfo=timezone.utc)
 
 
-Fields = Mapping[str, Any]
+FieldsMapping = Mapping[str, Any]
 
 
 class Record(TypedDict):
     id: str
-    fields: Fields
+    fields: FieldsMapping
     createdTime: str
 
 
@@ -116,7 +114,13 @@ class AirtableServer:
         self._tables: dict[tuple[str, str], list[Record]] = {}
         self._requests: list[RequestData] = []
         self._api_key: Final = api_key
-        application = Application(middlewares=(self._auth, self._log))
+        application = Application(
+            middlewares=(
+                self._auth,
+                self._content_type,
+                self._log,
+            )
+        )
         application.router.add_routes(
             (
                 get(
@@ -155,6 +159,20 @@ class AirtableServer:
             raise HTTPBadRequest(reason="Wrong authorization header")
         if request.headers.get("User-Agent") != aat.SOFTWARE:
             raise HTTPBadRequest(reason="Wrong user-agent header")
+        return await handler(request)
+
+    @middleware
+    async def _content_type(
+        self,
+        request: Request,
+        handler: Handler,
+    ) -> StreamResponse:
+        length = len(await request.read())
+        if length > 0:
+            if "Content-Type" not in request.headers:
+                raise HTTPBadRequest(reason="Content-Type header absent")
+            if request.headers["Content-Type"] != "application/json":
+                raise HTTPBadRequest(reason="Wrong Content-Type header")
         return await handler(request)
 
     @middleware
@@ -386,9 +404,9 @@ async def test_backoff() -> None:
             self.first_attempt = True
 
         @backoff.on_exception(
-            backoff_wait_gen,
+            aat.backoff_wait_gen,
             ClientResponseError,
-            giveup=backoff_giveup,
+            giveup=aat.backoff_giveup,
             at_wait=0.01,
         )
         async def request(self) -> None:
@@ -451,9 +469,9 @@ async def test_airtable_underscore_request(
     airtable: Airtable,
     url: URL,
 ) -> None:
-    assert await airtable._request("GET", url, RecordList) == RecordList(
-        records=()
-    )
+    assert await airtable._request(
+        "GET", url, aat.RecordList
+    ) == aat.RecordList(records=())
     assert server.requests() == [RequestData("GET", url, None)]
 
 
@@ -469,15 +487,15 @@ async def test_airtable_request(
         "base_id",
         "GET",
         url,
-        RecordList,
-    ) == RecordList(records=())
+        aat.RecordList,
+    ) == aat.RecordList(records=())
     assert server.requests() == [RequestData("GET", url, None)]
     assert await airtable.request(
         "base_id",
         "GET",
         url,
-        RecordList,
-    ) == RecordList(records=())
+        aat.RecordList,
+    ) == aat.RecordList(records=())
     time2 = loop.time()
     assert time2 - time1 >= aat.AT_INTERVAL
     assert server.requests() == [
@@ -533,7 +551,9 @@ async def test_airtable_base_request(
     server: AirtableServer, airtable: Airtable, url: URL
 ) -> None:
     base = airtable.base("base_id")
-    assert await base.request("GET", url, RecordList) == RecordList(records=())
+    assert await base.request("GET", url, aat.RecordList) == aat.RecordList(
+        records=()
+    )
     assert server.requests() == [RequestData("GET", url, None)]
 
 
@@ -544,7 +564,7 @@ class S(Struct):
 @pytest.mark.asyncio
 async def test_airtable_base_table(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     assert isinstance(table, AirtableTable)
     assert table.name == "some_table"
     assert table.url == base.url / "some_table"
@@ -558,14 +578,14 @@ async def test_airtable_table_request(
     url: URL,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name", Struct)
-    assert await table._request("GET", url, RecordList) == RecordList(
+    table = base.table("table_name", Fields)
+    assert await table._request("GET", url, aat.RecordList) == aat.RecordList(
         records=()
     )
     assert server.requests() == [RequestData("GET", url, None)]
 
 
-class F(Struct):
+class F(Fields, frozen=True):
     field_1: str | None = None
     field_2: str | None = None
     field_3: str | None = None
@@ -728,7 +748,6 @@ async def test_airtable_table_create_record(
         field_2="value_2_new_001",
         field_3="value_3_new_001",
     )
-    assert record.created_time == parse_dt(dt_str)
     assert record.table == table
     assert server.requests() == [
         RequestData(
@@ -751,10 +770,10 @@ async def test_airtable_record_init(
     dt_str: str,
 ) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
@@ -764,16 +783,16 @@ async def test_airtable_record_init(
 @pytest.mark.asyncio
 async def test_airtable_record_repr(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     time_string = "2021-01-25T17:28:21.000Z"
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         parse_dt(time_string),
         table,
     )
     assert repr(record) == (
-        "AirtableRecord(record_id='record1', fields=Struct(), "
+        "AirtableRecord(record_id='record1', fields=Fields(), "
         "created_time=datetime.datetime(2021, 1, 25, 17, "
         "28, 21, tzinfo=datetime.timezone.utc), "
         "table=AirtableTable(table_name='some_table', "
@@ -785,10 +804,10 @@ async def test_airtable_record_repr(airtable: Airtable) -> None:
 @pytest.mark.asyncio
 async def test_airtable_record_table(airtable: Airtable) -> None:
     base = airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
@@ -875,10 +894,10 @@ async def test_airtable_record_delete(
     dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
-    table = base.table("table_name", Struct)
+    table = base.table("table_name", Fields)
     record = AirtableRecord(
         "record000",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
@@ -889,5 +908,5 @@ async def test_airtable_record_delete(
         await record.delete()
     assert server.requests() == [RequestData("DELETE", record.url, None)]
     with pytest.raises(RuntimeError, match="Record is deleted"):
-        await record.update(Struct())
+        await record.update(Fields())
     assert server.requests() == [RequestData("DELETE", record.url, None)]

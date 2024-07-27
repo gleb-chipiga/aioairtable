@@ -7,6 +7,7 @@ import msgspec.json
 import pytest
 import pytest_asyncio
 from msgspec import Struct
+from multidict import CIMultiDict
 from pytest_mock import MockerFixture
 from yarl import URL
 
@@ -15,9 +16,7 @@ from aioairtable import aioairtable as aat
 from aioairtable.aioairtable import (
     AirtableRecord,
     CellFormat,
-    DeletedRecord,
-    Record,
-    RecordList,
+    Fields,
     RecordRequest,
     SortDirection,
 )
@@ -66,14 +65,57 @@ async def test_airtable_underscore_request(
     response = request.return_value.__aenter__.return_value
     response.read.return_value = msgspec.json.encode(some_response_data)
     assert (
-        await _airtable._request("GET", url, SomeResponseData)
+        await _airtable._request(
+            "GET",
+            url,
+            SomeResponseData,
+        )
         == some_response_data
     )
     request.assert_called_once_with(
         "GET",
         url,
-        headers={"Authorization": "Bearer secret_key"},
+        headers=CIMultiDict(
+            (
+                ("User-Agent", aat.SOFTWARE),
+                ("Authorization", "Bearer secret_key"),
+            )
+        ),
         data=None,
+    )
+    response.read.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_airtable_underscore_request_payload(
+    _airtable: Airtable,
+    url: URL,
+    some_response_data: SomeResponseData,
+    mocker: MockerFixture,
+) -> None:
+    request = mocker.patch.object(_airtable._client, "request")
+    response = request.return_value.__aenter__.return_value
+    response.read.return_value = msgspec.json.encode(some_response_data)
+    assert (
+        await _airtable._request(
+            "GET",
+            url,
+            SomeResponseData,
+            Struct(),
+        )
+        == some_response_data
+    )
+    request.assert_called_once_with(
+        "GET",
+        url,
+        headers=CIMultiDict(
+            (
+                ("User-Agent", aat.SOFTWARE),
+                ("Authorization", "Bearer secret_key"),
+                ("Content-Type", "application/json"),
+            )
+        ),
+        data=b"{}",
     )
     response.read.assert_awaited_once_with()
 
@@ -147,7 +189,7 @@ async def test_airtable_table_request(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     request = mocker.patch.object(table._base, "request")
     request.return_value = some_response_data
     assert (
@@ -172,9 +214,9 @@ async def test_airtable_table_list_records(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
-    request.return_value = RecordList(records=())
+    request.return_value = aat.RecordList(records=())
     records, offset = await table.list_records(
         fields=("field1", "field2", "field3"),
         filter_by_formula="{field4}",
@@ -208,7 +250,7 @@ async def test_airtable_table_list_records(
                 ("offset", "offset22"),
             )
         ),
-        type_=RecordList[Struct],
+        type_=aat.RecordList[Fields],
     )
     assert records == ()
     assert offset is None
@@ -221,23 +263,23 @@ async def test_airtable_table_iter_records(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
     request.side_effect = (
-        RecordList(
+        aat.RecordList(
             records=(
-                Record(id="record1", fields=Struct(), created_time=now),
-                Record(id="record2", fields=Struct(), created_time=now),
-                Record(id="record3", fields=Struct(), created_time=now),
+                aat.Record(id="record1", fields=Fields(), created_time=now),
+                aat.Record(id="record2", fields=Fields(), created_time=now),
+                aat.Record(id="record3", fields=Fields(), created_time=now),
             ),
             offset="offset1",
         ),
-        RecordList(
+        aat.RecordList(
             records=(
-                Record(id="record4", fields=Struct(), created_time=now),
-                Record(id="record5", fields=Struct(), created_time=now),
-                Record(id="record6", fields=Struct(), created_time=now),
+                aat.Record(id="record4", fields=Fields(), created_time=now),
+                aat.Record(id="record5", fields=Fields(), created_time=now),
+                aat.Record(id="record6", fields=Fields(), created_time=now),
             ),
         ),
     )
@@ -246,12 +288,12 @@ async def test_airtable_table_iter_records(
         call(
             "GET",
             table.url.with_query(pageSize=25),
-            type_=RecordList[Struct],
+            type_=aat.RecordList[Fields],
         ),
         call(
             "GET",
             table.url.with_query(pageSize=25, offset="offset1"),
-            type_=RecordList[Struct],
+            type_=aat.RecordList[Fields],
         ),
     ]
     assert all(isinstance(record, AirtableRecord) for record in records)
@@ -273,12 +315,12 @@ async def test_airtable_table_retrieve_record(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
-    record = Record(
+    record = aat.Record(
         id="record1",
-        fields=Struct(),
+        fields=Fields(),
         created_time=now,
     )
     request.return_value = record
@@ -286,11 +328,11 @@ async def test_airtable_table_retrieve_record(
     request.assert_awaited_once_with(
         "GET",
         table.url / "record1",
-        type_=Record[Struct],
+        type_=aat.Record[Fields],
     )
     assert isinstance(at_record, AirtableRecord)
     assert at_record.id == "record1"
-    assert at_record.fields == Struct()
+    assert at_record.fields == Fields()
     assert at_record.created_time == now
     assert at_record.table == table
 
@@ -302,24 +344,24 @@ async def test_airtable_table_create_record(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
-    request.return_value = Record(
+    request.return_value = aat.Record(
         id="record1",
-        fields=Struct(),
+        fields=Fields(),
         created_time=now,
     )
-    record = await table.create_record(Struct())
+    record = await table.create_record(Fields())
     request.assert_awaited_once_with(
         "POST",
         table.url,
-        payload=RecordRequest(Struct()),
-        type_=Record[Struct],
+        payload=RecordRequest(Fields()),
+        type_=aat.Record[Fields],
     )
     assert isinstance(record, AirtableRecord)
     assert record.id == "record1"
-    assert record.fields == Struct()
+    assert record.fields == Fields()
     assert record.created_time == now
     assert record.table == table
 
@@ -333,10 +375,10 @@ async def test_airtable_record_request(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
@@ -365,28 +407,28 @@ async def test_airtable_record_update(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
     request = mocker.patch.object(record, "_request")
-    request.return_value = Record(
+    request.return_value = aat.Record(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
     )
     await record.update(
-        Struct(),
+        Fields(),
     )
-    assert record.fields == Struct()
+    assert record.fields == Fields()
     request.assert_awaited_once_with(
         "PATCH",
         record.url,
-        type_=Record[Struct],
-        payload=RecordRequest(Struct()),
+        type_=aat.Record[Fields],
+        payload=RecordRequest(Fields()),
     )
 
 
@@ -397,19 +439,19 @@ async def test_airtable_record_delete(
     mocker: MockerFixture,
 ) -> None:
     base = _airtable.base("some_base_id")
-    table = base.table("some_table", Struct)
+    table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
-        Struct(),
+        Fields(),
         datetime.now(UTC),
         table,
     )
     request = mocker.patch.object(record, "_request")
-    request.return_value = DeletedRecord("record1", True)
+    request.return_value = aat.DeletedRecord("record1", True)
     await record.delete()
     assert record.deleted
     request.assert_awaited_once_with(
         "DELETE",
         record.url,
-        type_=DeletedRecord,
+        type_=aat.DeletedRecord,
     )
