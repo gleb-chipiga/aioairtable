@@ -12,6 +12,7 @@ dependencies = [
     { name = "backoff" },
     { name = "msgspec" },
     { name = "multidict" },
+    { name = "typing-extensions" },
     { name = "yarl" },
 ]
 
@@ -50,6 +51,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2" },
     { name = "msgspec" },
     { name = "multidict" },
+    { name = "typing-extensions" },
     { name = "yarl" },
 ]
 

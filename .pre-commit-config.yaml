@@ -25,7 +25,15 @@ repos:
         additional_dependencies:
           - pytest>=9.0.1
           - pytest-asyncio>=1.3.0
+          - pytest-mock>=3.14.0
           - hypothesis>=6.148.1
+          - aiohttp
+          - multidict
+          - yarl
+          - backoff>=2
+          - aiofreqlimit>=0.0.7
+          - msgspec
+          - typing_extensions
 
   - repo: https://github.com/DetachHead/basedpyright-prek-mirror
     rev: 1.33.0

@@ -212,9 +212,14 @@ class AirtableServer:
         if not self._started:
             raise RuntimeError("Server not started")
         assert self._tmp_dir is not None
+        # Save paths before cleanup - runner may remove socket
+        socket_path = self._socket_path
+        tmp_dir = self._tmp_dir
         await self._runner.cleanup()
-        await self._loop.run_in_executor(None, os.remove, self._socket_path)
-        await self._loop.run_in_executor(None, os.rmdir, self._tmp_dir)
+        if os.path.exists(socket_path):
+            await self._loop.run_in_executor(None, os.remove, socket_path)
+        if os.path.exists(tmp_dir):
+            await self._loop.run_in_executor(None, os.rmdir, tmp_dir)
         self._started = False
 
     @property

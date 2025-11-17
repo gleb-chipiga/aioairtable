@@ -37,6 +37,7 @@ dependencies = [
     "backoff>=2",
     "aiofreqlimit>=0.0.7",
     "msgspec",
+    "typing_extensions",
 ]
 
 [dependency-groups]
