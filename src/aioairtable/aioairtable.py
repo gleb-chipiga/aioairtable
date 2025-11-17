@@ -1,17 +1,14 @@
 import logging
+from collections.abc import AsyncIterator, Generator, Iterable
 from datetime import datetime
 from enum import IntEnum, StrEnum, unique
 from types import TracebackType
 from typing import (
     Any,
-    AsyncIterator,
     Final,
-    Generator,
     Generic,
-    Iterable,
     Literal,
     Self,
-    Type,
     TypeVar,
 )
 
@@ -21,6 +18,7 @@ from aiofreqlimit import FreqLimit
 from aiohttp import BaseConnector, ClientResponseError, ClientSession
 from msgspec import Struct, field
 from multidict import CIMultiDict, MultiDict
+from typing_extensions import override
 from yarl import URL
 
 from .helpers import get_software
@@ -64,6 +62,7 @@ class Fields(Struct, omit_defaults=True):
 
 
 _T = TypeVar("_T", bound=Fields)
+_F = TypeVar("_F", bound=Fields)
 
 
 class Record(Struct, Generic[_T], frozen=True):
@@ -84,6 +83,22 @@ class DeletedRecord(Struct, frozen=True):
 class RecordList(Struct, Generic[_T], frozen=True):
     records: tuple[Record[_T], ...]
     offset: str | None = None
+
+
+def _make_record_list_type_helper(
+    fields_type: type[_F],
+) -> type[RecordList[_F]]:
+    """Helper function to create RecordList type with dynamic type."""
+    # Here mypy sees a variable in type and complains with [valid-type]
+    return RecordList[fields_type]  # type: ignore[valid-type]
+
+
+def _make_record_type_helper(
+    fields_type: type[_F],
+) -> type[Record[_F]]:
+    """Helper function to create Record type with dynamic type."""
+    # Here mypy sees a variable in type and complains with [valid-type]
+    return Record[fields_type]  # type: ignore[valid-type]
 
 
 class Thumbnail(Struct, frozen=True):
@@ -127,7 +142,9 @@ class CellFormat(StrEnum):
     STRING = "string"
 
 
-def backoff_wait_gen(at_wait: float) -> Generator[float, Any, None]:
+def backoff_wait_gen(
+    at_wait: float,
+) -> Generator[float, Any, None]:  # pyright: ignore[reportExplicitAny]
     expo_gen = backoff.expo()
     yield expo_gen.send(None)
     for value in expo_gen:
@@ -137,14 +154,17 @@ def backoff_wait_gen(at_wait: float) -> Generator[float, Any, None]:
 def backoff_giveup(exception: Exception) -> bool:
     assert isinstance(exception, ClientResponseError)
     try:
-        BackoffCodes(exception.status)
+        _ = BackoffCodes(exception.status)
     except ValueError:
         return True
     else:
         return False
 
 
-def build_repr(class_name: str, **kwargs: Any) -> str:
+def build_repr(
+    class_name: str,
+    **kwargs: object,
+) -> str:
     args = ", ".join(f"{key}={value!r}" for key, value in kwargs.items())
     return f"{class_name}({args})"
 
@@ -158,24 +178,21 @@ class Airtable:
         api_key: str,
         connector: BaseConnector | None = None,
     ) -> None:
-        self._headers: Final = CIMultiDict(
-            {
-                "User-Agent": SOFTWARE,
-                "Authorization": f"Bearer {api_key}",
-            }
-        )
-        self._json_headers: Final = CIMultiDict(
-            {
-                **self._headers,
-                **{"Content-Type": "application/json"},
-            }
-        )
-        self._client = ClientSession(
+        self._headers: Final = CIMultiDict({
+            "User-Agent": SOFTWARE,
+            "Authorization": f"Bearer {api_key}",
+        })
+        self._json_headers: Final = CIMultiDict({
+            **self._headers,
+            **{"Content-Type": "application/json"},
+        })
+        self._client: ClientSession = ClientSession(
             connector=connector,
             raise_for_status=True,
         )
-        self._freq_limit = FreqLimit(AT_INTERVAL)
+        self._freq_limit: FreqLimit = FreqLimit(AT_INTERVAL)
 
+    @override
     def __repr__(self) -> str:
         return build_repr("Airtable", api_key="...")
 
@@ -187,7 +204,7 @@ class Airtable:
         self,
         method: Method,
         url: URL,
-        type_: Type[_R],
+        type_: type[_R],
         payload: Struct | None = None,
     ) -> _R:
         async with self._client.request(
@@ -221,7 +238,7 @@ class Airtable:
         base_id: str,
         method: Method,
         url: URL,
-        type_: Type[_R],
+        type_: type[_R],
         payload: Struct | None = None,
     ) -> _R:
         async with self._freq_limit.resource(base_id):
@@ -244,7 +261,7 @@ class Airtable:
 
     async def __aexit__(
         self,
-        exc_type: Type[BaseException] | None,
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
@@ -261,6 +278,7 @@ class AirtableBase:
         self._id: Final[str] = base_id
         self._url: Final[URL] = API_URL / base_id
 
+    @override
     def __repr__(self) -> str:
         return build_repr(
             "AirtableBase",
@@ -280,8 +298,8 @@ class AirtableBase:
         self,
         method: Method,
         url: URL,
-        type_: Type[_R],
-        payload: Any = None,
+        type_: type[_R],
+        payload: Struct | None = None,
     ) -> _R:
         return await self._airtable.request(
             self._id,
@@ -291,9 +309,7 @@ class AirtableBase:
             payload,
         )
 
-    def table(
-        self, table_name: str, fields_type: Type[_T]
-    ) -> "AirtableTable[_T]":
+    def table(self, table_name: str, fields_type: type[_T]) -> "AirtableTable[_T]":
         return AirtableTable(table_name, self, fields_type)
 
 
@@ -302,17 +318,16 @@ class AirtableTable(Generic[_T]):
         self,
         table_name: str,
         base: AirtableBase,
-        fields_type: Type[_T],
+        fields_type: type[_T],
     ) -> None:
         self._name: Final = table_name
         self._base: Final = base
         self._url: Final[URL] = base.url / table_name
-        self._fields_type: Final = fields_type
+        self._fields_type: Final[type[_T]] = fields_type
 
+    @override
     def __repr__(self) -> str:
-        return build_repr(
-            "AirtableTable", table_name=self._name, base=self._base
-        )
+        return build_repr("AirtableTable", table_name=self._name, base=self._base)
 
     @property
     def name(self) -> str:
@@ -327,15 +342,29 @@ class AirtableTable(Generic[_T]):
         return self._base
 
     @property
-    def fields_type(self) -> Type[_T]:
+    def fields_type(self) -> type[_T]:
         return self._fields_type
+
+    def _make_record_list_type(
+        self,
+        fields_type: type[_T],
+    ) -> type[RecordList[_T]]:
+        # Use modular helper function
+        return _make_record_list_type_helper(fields_type)
+
+    def _make_record_type(
+        self,
+        fields_type: type[_T],
+    ) -> type[Record[_T]]:
+        # Use modular helper function and cast to preserve _T
+        return _make_record_type_helper(fields_type)
 
     async def _request(
         self,
         method: Method,
         url: URL,
-        type_: Type[_R],
-        payload: Any = None,
+        type_: type[_R],
+        payload: Struct | None = None,
     ) -> _R:
         return await self._base.request(
             method,
@@ -382,11 +411,13 @@ class AirtableTable(Generic[_T]):
         if offset is not None:
             params.add("offset", offset)
         url = self._url.with_query(params)
-        fields_type = self._fields_type
+        # Get runtime type RecordList[...] via helper
+        record_list_type = self._make_record_list_type(self.fields_type)
+
         record_list = await self._request(
             "GET",
             url,
-            type_=RecordList[fields_type],  # type: ignore[valid-type]
+            type_=record_list_type,
         )
         records = tuple(
             AirtableRecord(
@@ -435,11 +466,13 @@ class AirtableTable(Generic[_T]):
         self,
         record_id: str,
     ) -> "AirtableRecord[_T]":
-        fields_type = self._fields_type
+        # Create runtime type Record[...] via helper
+        record_type = self._make_record_type(self.fields_type)
+
         record = await self._request(
             "GET",
             self._url / record_id,
-            type_=Record[fields_type],  # type: ignore[valid-type]
+            type_=record_type,
         )
         return AirtableRecord(
             record.id,
@@ -452,11 +485,13 @@ class AirtableTable(Generic[_T]):
         self,
         fields: _T,
     ) -> "AirtableRecord[_T]":
-        fields_type = self._fields_type
+        # Create runtime type Record[...]
+        record_type = self._make_record_type(self.fields_type)
+
         record = await self._request(
             "POST",
             self._url,
-            type_=Record[fields_type],  # type: ignore[valid-type]
+            type_=record_type,
             payload=RecordRequest(fields),
         )
         return AirtableRecord(
@@ -478,10 +513,11 @@ class AirtableRecord(Generic[_T]):
         self._table: Final = table
         self._id: Final = record_id
         self._url: Final = table.url / record_id
-        self._fields = fields
+        self._fields: _T = fields
         self._created_time: Final = created_time
         self._deleted: bool = False
 
+    @override
     def __repr__(self) -> str:
         return build_repr(
             "AirtableRecord",
@@ -519,7 +555,7 @@ class AirtableRecord(Generic[_T]):
         self,
         method: Method,
         url: URL,
-        type_: Type[_R],
+        type_: type[_R],
         payload: Struct | None = None,
     ) -> _R:
         return await self._table.base.request(
@@ -535,12 +571,14 @@ class AirtableRecord(Generic[_T]):
     ) -> None:
         if self._deleted:
             raise RuntimeError("Record is deleted")
-        fields_type = self._table.fields_type
+        # Create runtime type Record[...] via helper function
+        record_type = _make_record_type_helper(self._table.fields_type)
+
         record = await self._request(
             "PATCH",
             self._url,
             payload=RecordRequest(fields),
-            type_=Record[fields_type],  # type: ignore[valid-type]
+            type_=record_type,
         )
         self._fields = record.fields
 

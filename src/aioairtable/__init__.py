@@ -1,5 +1,4 @@
-__version__ = "0.1.6"
-
+from ._version import __version__
 from .aioairtable import (
     Airtable,
     AirtableBase,

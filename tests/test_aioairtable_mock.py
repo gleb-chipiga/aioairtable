@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import AsyncGenerator, Final
+from typing import Final
 from unittest.mock import call
 
 import msgspec.json
@@ -11,8 +12,7 @@ from multidict import CIMultiDict
 from pytest_mock import MockerFixture
 from yarl import URL
 
-from aioairtable import Airtable
-from aioairtable import aioairtable as aat
+from aioairtable import Airtable, aioairtable as aat
 from aioairtable.aioairtable import (
     AirtableRecord,
     CellFormat,
@@ -20,6 +20,8 @@ from aioairtable.aioairtable import (
     RecordRequest,
     SortDirection,
 )
+
+# pyright: reportPrivateUsage=false
 
 DT_FORMAT: Final = "%Y-%m-%dT%H:%M:%S.000Z"
 
@@ -29,17 +31,12 @@ def parse_dt(string: str) -> datetime:
 
 
 @pytest.fixture
-def dt_str() -> str:
-    return datetime.now().strftime(DT_FORMAT)
-
-
-@pytest.fixture
 def url() -> URL:
     return URL("https://example.com")
 
 
 @pytest_asyncio.fixture
-async def _airtable() -> AsyncGenerator[Airtable, None]:
+async def airtable_mock() -> AsyncGenerator[Airtable, None]:
     airtable = Airtable("secret_key")
     yield airtable
     await airtable.close()
@@ -56,16 +53,16 @@ def some_response_data() -> SomeResponseData:
 
 @pytest.mark.asyncio
 async def test_airtable_underscore_request(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
-    request = mocker.patch.object(_airtable._client, "request")
-    response = request.return_value.__aenter__.return_value
-    response.read.return_value = msgspec.json.encode(some_response_data)
+    request = mocker.patch.object(airtable_mock._client, "request")
+    response = request.return_value.__aenter__.return_value  # pyright: ignore[reportAny]
+    response.read.return_value = msgspec.json.encode(some_response_data)  # pyright: ignore[reportAny]
     assert (
-        await _airtable._request(
+        await airtable_mock._request(
             "GET",
             url,
             SomeResponseData,
@@ -75,29 +72,27 @@ async def test_airtable_underscore_request(
     request.assert_called_once_with(
         "GET",
         url,
-        headers=CIMultiDict(
-            (
-                ("User-Agent", aat.SOFTWARE),
-                ("Authorization", "Bearer secret_key"),
-            )
-        ),
+        headers=CIMultiDict((
+            ("User-Agent", aat.SOFTWARE),
+            ("Authorization", "Bearer secret_key"),
+        )),
         data=None,
     )
-    response.read.assert_awaited_once_with()
+    response.read.assert_awaited_once_with()  # pyright: ignore[reportAny]
 
 
 @pytest.mark.asyncio
 async def test_airtable_underscore_request_payload(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
-    request = mocker.patch.object(_airtable._client, "request")
-    response = request.return_value.__aenter__.return_value
-    response.read.return_value = msgspec.json.encode(some_response_data)
+    request = mocker.patch.object(airtable_mock._client, "request")
+    response = request.return_value.__aenter__.return_value  # pyright: ignore[reportAny]
+    response.read.return_value = msgspec.json.encode(some_response_data)  # pyright: ignore[reportAny]
     assert (
-        await _airtable._request(
+        await airtable_mock._request(
             "GET",
             url,
             SomeResponseData,
@@ -108,30 +103,28 @@ async def test_airtable_underscore_request_payload(
     request.assert_called_once_with(
         "GET",
         url,
-        headers=CIMultiDict(
-            (
-                ("User-Agent", aat.SOFTWARE),
-                ("Authorization", "Bearer secret_key"),
-                ("Content-Type", "application/json"),
-            )
-        ),
+        headers=CIMultiDict((
+            ("User-Agent", aat.SOFTWARE),
+            ("Authorization", "Bearer secret_key"),
+            ("Content-Type", "application/json"),
+        )),
         data=b"{}",
     )
-    response.read.assert_awaited_once_with()
+    response.read.assert_awaited_once_with()  # pyright: ignore[reportAny]
 
 
 @pytest.mark.asyncio
 async def test_airtable_request(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
     loop = asyncio.get_running_loop()
-    request = mocker.patch.object(_airtable, "_request")
+    request = mocker.patch.object(airtable_mock, "_request")
     request.return_value = some_response_data
     assert (
-        await _airtable.request(
+        await airtable_mock.request(
             "some_base_id",
             "GET",
             url,
@@ -139,10 +132,10 @@ async def test_airtable_request(
         )
         == some_response_data
     )
-    request.assert_awaited_once_with("GET", url, SomeResponseData, None)
+    _ = request.assert_awaited_once_with("GET", url, SomeResponseData, None)
     time1 = loop.time()
     assert (
-        await _airtable.request(
+        await airtable_mock.request(
             "some_base_id",
             "GET",
             url,
@@ -156,12 +149,12 @@ async def test_airtable_request(
 
 @pytest.mark.asyncio
 async def test_airtable_base_request(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     request = mocker.patch.object(base._airtable, "request")
     request.return_value = some_response_data
     assert (
@@ -172,7 +165,7 @@ async def test_airtable_base_request(
         )
         == some_response_data
     )
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "some_base_id",
         "GET",
         url,
@@ -183,12 +176,12 @@ async def test_airtable_base_request(
 
 @pytest.mark.asyncio
 async def test_airtable_table_request(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     request = mocker.patch.object(table._base, "request")
     request.return_value = some_response_data
@@ -200,7 +193,7 @@ async def test_airtable_table_request(
         )
         == some_response_data
     )
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "GET",
         url,
         SomeResponseData,
@@ -210,10 +203,10 @@ async def test_airtable_table_request(
 
 @pytest.mark.asyncio
 async def test_airtable_table_list_records(
-    _airtable: Airtable,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     request.return_value = aat.RecordList(records=())
@@ -229,27 +222,25 @@ async def test_airtable_table_list_records(
         user_locale="ru",
         offset="offset22",
     )
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "GET",
-        table.url.with_query(
-            (
-                ("fields[]", "field1"),
-                ("fields[]", "field2"),
-                ("fields[]", "field3"),
-                ("filterByFormula", "{field4}"),
-                ("maxRecords", "100500"),
-                ("pageSize", "10"),
-                ("sort[0][field]", "field5"),
-                ("sort[0][direction]", "asc"),
-                ("sort[1][field]", "field6"),
-                ("sort[1][direction]", "desc"),
-                ("view", "table3"),
-                ("cellFormat", "json"),
-                ("timeZone", "Europe/Moscow"),
-                ("userLocale", "ru"),
-                ("offset", "offset22"),
-            )
-        ),
+        table.url.with_query((
+            ("fields[]", "field1"),
+            ("fields[]", "field2"),
+            ("fields[]", "field3"),
+            ("filterByFormula", "{field4}"),
+            ("maxRecords", "100500"),
+            ("pageSize", "10"),
+            ("sort[0][field]", "field5"),
+            ("sort[0][direction]", "asc"),
+            ("sort[1][field]", "field6"),
+            ("sort[1][direction]", "desc"),
+            ("view", "table3"),
+            ("cellFormat", "json"),
+            ("timeZone", "Europe/Moscow"),
+            ("userLocale", "ru"),
+            ("offset", "offset22"),
+        )),
         type_=aat.RecordList[Fields],
     )
     assert records == ()
@@ -258,11 +249,10 @@ async def test_airtable_table_list_records(
 
 @pytest.mark.asyncio
 async def test_airtable_table_iter_records(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
@@ -283,7 +273,8 @@ async def test_airtable_table_iter_records(
             ),
         ),
     )
-    records = tuple([record async for record in table.iter_records()])
+    records_list = [record async for record in table.iter_records()]
+    records: tuple[AirtableRecord[Fields], ...] = tuple(records_list)
     assert request.await_args_list == [
         call(
             "GET",
@@ -310,11 +301,10 @@ async def test_airtable_table_iter_records(
 
 @pytest.mark.asyncio
 async def test_airtable_table_retrieve_record(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
@@ -325,7 +315,7 @@ async def test_airtable_table_retrieve_record(
     )
     request.return_value = record
     at_record = await table.retrieve_record("record1")
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "GET",
         table.url / "record1",
         type_=aat.Record[Fields],
@@ -339,11 +329,10 @@ async def test_airtable_table_retrieve_record(
 
 @pytest.mark.asyncio
 async def test_airtable_table_create_record(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     request = mocker.patch.object(table, "_request")
     now = datetime.now(UTC)
@@ -353,7 +342,7 @@ async def test_airtable_table_create_record(
         created_time=now,
     )
     record = await table.create_record(Fields())
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "POST",
         table.url,
         payload=RecordRequest(Fields()),
@@ -368,13 +357,12 @@ async def test_airtable_table_create_record(
 
 @pytest.mark.asyncio
 async def test_airtable_record_request(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     url: URL,
     some_response_data: SomeResponseData,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
@@ -392,7 +380,7 @@ async def test_airtable_record_request(
         )
         == some_response_data
     )
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "GET",
         url,
         SomeResponseData,
@@ -402,11 +390,10 @@ async def test_airtable_record_request(
 
 @pytest.mark.asyncio
 async def test_airtable_record_update(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
@@ -424,7 +411,7 @@ async def test_airtable_record_update(
         Fields(),
     )
     assert record.fields == Fields()
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "PATCH",
         record.url,
         type_=aat.Record[Fields],
@@ -434,11 +421,10 @@ async def test_airtable_record_update(
 
 @pytest.mark.asyncio
 async def test_airtable_record_delete(
-    _airtable: Airtable,
-    dt_str: str,
+    airtable_mock: Airtable,
     mocker: MockerFixture,
 ) -> None:
-    base = _airtable.base("some_base_id")
+    base = airtable_mock.base("some_base_id")
     table = base.table("some_table", Fields)
     record = AirtableRecord(
         "record1",
@@ -450,7 +436,7 @@ async def test_airtable_record_delete(
     request.return_value = aat.DeletedRecord("record1", True)
     await record.delete()
     assert record.deleted
-    request.assert_awaited_once_with(
+    _ = request.assert_awaited_once_with(
         "DELETE",
         record.url,
         type_=aat.DeletedRecord,

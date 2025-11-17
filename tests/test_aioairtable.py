@@ -1,17 +1,13 @@
 import asyncio
 import os
 import re
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from tempfile import mkdtemp
 from typing import (
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
     Final,
-    Mapping,
-    Optional,
     Protocol,
     TypedDict,
     cast,
@@ -60,14 +56,16 @@ from aioairtable.aioairtable import (
     SortDirection,
 )
 
+# pyright: reportPrivateUsage=false
+
 DT_FORMAT: Final = "%Y-%m-%dT%H:%M:%S.000Z"
 
 
 def parse_dt(string: str) -> datetime:
-    return datetime.strptime(string, DT_FORMAT).replace(tzinfo=timezone.utc)
+    return datetime.strptime(string, DT_FORMAT).replace(tzinfo=UTC)
 
 
-FieldsMapping = Mapping[str, Any]
+FieldsMapping = Mapping[str, Any]  # pyright: ignore[reportExplicitAny]
 
 
 class Record(TypedDict):
@@ -85,7 +83,7 @@ class DeletedRecord(TypedDict):
 class RequestData:
     method: str
     url: URL
-    data: Any
+    data: Any  # pyright: ignore[reportExplicitAny]
 
 
 Handler = Callable[[Request], Awaitable[StreamResponse]]
@@ -93,7 +91,8 @@ Handler = Callable[[Request], Awaitable[StreamResponse]]
 
 @runtime_checkable
 class SupportsLessThan(Protocol):
-    def __lt__(self, other: Any) -> bool: ...
+    def __lt__(self, other: Any) -> bool:  # pyright: ignore[reportAny, reportExplicitAny]
+        ...
 
 
 def fields_sort_key(field: str) -> Callable[[Record], SupportsLessThan]:
@@ -110,7 +109,7 @@ class AirtableServer:
         self._started: bool = False
         self._tmp_dir: str | None = None
         self._connector: UnixConnector | None = None
-        self._loop = asyncio.get_running_loop()
+        self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
         self._tables: dict[tuple[str, str], list[Record]] = {}
         self._requests: list[RequestData] = []
         self._api_key: Final = api_key
@@ -121,31 +120,29 @@ class AirtableServer:
                 self._log,
             )
         )
-        application.router.add_routes(
-            (
-                get(
-                    "/v0/{base_id}/{table_name}",
-                    self.list_records,
-                ),
-                get(
-                    "/v0/{base_id}/{table_name}/{record_id}",
-                    self.retrieve_record,
-                ),
-                post(
-                    "/v0/{base_id}/{table_name}",
-                    self.create_record,
-                ),
-                patch(
-                    "/v0/{base_id}/{table_name}/{record_id}",
-                    self.update_record,
-                ),
-                delete(
-                    "/v0/{base_id}/{table_name}/{record_id}",
-                    self.delete_record,
-                ),
-            )
-        )
-        self._runner = AppRunner(application)
+        _ = application.router.add_routes((
+            get(
+                "/v0/{base_id}/{table_name}",
+                self.list_records,
+            ),
+            get(
+                "/v0/{base_id}/{table_name}/{record_id}",
+                self.retrieve_record,
+            ),
+            post(
+                "/v0/{base_id}/{table_name}",
+                self.create_record,
+            ),
+            patch(
+                "/v0/{base_id}/{table_name}/{record_id}",
+                self.update_record,
+            ),
+            delete(
+                "/v0/{base_id}/{table_name}/{record_id}",
+                self.delete_record,
+            ),
+        ))
+        self._runner: AppRunner = AppRunner(application)
 
     @middleware
     async def _auth(
@@ -198,9 +195,7 @@ class AirtableServer:
     ) -> None:
         if (base_id, table_name) in self._tables:
             fields_keys = self._tables[base_id, table_name][0]["fields"].keys()
-            assert all(
-                record["fields"].keys() == fields_keys for record in records
-            )
+            assert all(record["fields"].keys() == fields_keys for record in records)
             self._tables[base_id, table_name].extend(records)
         else:
             self._tables[base_id, table_name] = records
@@ -239,10 +234,7 @@ class AirtableServer:
             raise HTTPNotFound(reason="Table not found")
         sort: dict[int, dict[str, str]] = {}
         for key in request.query:
-            if (
-                not key.startswith("fields")
-                and len(request.query.getall(key)) > 1
-            ):
+            if not key.startswith("fields") and len(request.query.getall(key)) > 1:
                 raise HTTPBadRequest(reason="Wrong sort parameter1")
             match = re.match(r"sort\[([^]]+)]\[([^]]+)]", key)
             if match is not None:
@@ -261,13 +253,11 @@ class AirtableServer:
             if field not in records[0]["fields"]:
                 raise HTTPBadRequest(reason="Wrong sort parameter4")
             direction = sort[sort_index].get("direction", "asc")
-            records.sort(
-                key=fields_sort_key(field), reverse=direction == "desc"
-            )
+            records.sort(key=fields_sort_key(field), reverse=direction == "desc")
         if "maxRecords" in request.query:
             max_records = int(request.query["maxRecords"])
             records = records[:max_records]
-        offset: Optional[str] = None
+        offset: str | None = None
         if "offset" in request.query:
             for rec_idx, record in enumerate(records, start=1):
                 if record["id"] == request.query["offset"]:
@@ -284,7 +274,7 @@ class AirtableServer:
             for record in records:
                 record["fields"] = {
                     key: value
-                    for key, value in record["fields"].items()
+                    for key, value in record["fields"].items()  # pyright: ignore[reportAny]
                     if key in fields
                 }
         if offset is not None:
@@ -308,7 +298,7 @@ class AirtableServer:
     async def create_record(self, request: Request) -> Response:
         base_id = request.match_info["base_id"]
         table_name = request.match_info["table_name"]
-        fields = (await request.json())["fields"]
+        fields: FieldsMapping = (await request.json())["fields"]  # pyright: ignore[reportAny]
         created_time = datetime.now().strftime(DT_FORMAT)
         record = Record(
             id=f"record{self._loop.time()}",
@@ -343,20 +333,20 @@ class AirtableServer:
         table = self._tables[base_id, table_name]
         for index, record in enumerate(table.copy()):
             if record["id"] == record_id:
-                table.pop(index)
+                _ = table.pop(index)
                 deleted_record = DeletedRecord(id=record_id, deleted=True)
                 return json_response(deleted_record)
         else:
             raise HTTPNotFound()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def url() -> URL:
     url = URL("https://api.airtable.com/v0/base_id/table_name")
     return url.with_query(maxRecords=0)
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def dt_str() -> str:
     return datetime.now().strftime(DT_FORMAT)
 
@@ -391,14 +381,15 @@ async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
 
 def test_backoff_wait_gen() -> None:
     wait_gen = aat.backoff_wait_gen(aat.AT_WAIT)
-    wait_gen.send(None)
-    for value, i in zip(wait_gen, range(16)):
+    _ = wait_gen.send(None)
+    for value, i in zip(wait_gen, range(16), strict=False):
         assert value == aat.AT_WAIT + 2**i
 
 
 @pytest.mark.asyncio
 async def test_backoff() -> None:
     class TestClient:
+        first_attempt: bool
 
         def __init__(self) -> None:
             self.first_attempt = True
@@ -413,8 +404,7 @@ async def test_backoff() -> None:
             if self.first_attempt:
                 self.first_attempt = False
                 raise client_response_error(429)
-            else:
-                raise client_response_error(430)
+            raise client_response_error(430)
 
     tc = TestClient()
     with pytest.raises(ClientResponseError) as exc_info:
@@ -426,8 +416,8 @@ async def test_backoff() -> None:
 
 def client_response_error(status: int) -> ClientResponseError:
     url = URL("example.com")
-    info = RequestInfo(url, "GET", CIMultiDictProxy(CIMultiDict()), url)
-    return ClientResponseError(info, tuple(), status=status)
+    info = RequestInfo(url, "GET", CIMultiDictProxy(CIMultiDict[str]()), url)
+    return ClientResponseError(info, (), status=status)
 
 
 @given(integers(min_value=100, max_value=526))
@@ -438,7 +428,7 @@ def test_backoff_giveup(status: int) -> None:
 
 def test_backoff_giveup_wrong_exception() -> None:
     with pytest.raises(AssertionError):
-        aat.backoff_giveup(ValueError())
+        _ = aat.backoff_giveup(ValueError())
 
 
 def test_build_repr() -> None:
@@ -447,7 +437,7 @@ def test_build_repr() -> None:
 
 
 @pytest.mark.asyncio
-async def test_airtable_repr(airtable: Airtable) -> None:
+async def test_airtable_repr(airtable: Airtable) -> None:  # noqa: RUF029
     assert repr(airtable) == "Airtable(api_key='...')"
 
 
@@ -456,10 +446,8 @@ async def test_airtable_client(
     server: AirtableServer, airtable: Airtable, url: URL
 ) -> None:
     assert isinstance(airtable.client, ClientSession)
-    with pytest.raises(
-        ClientResponseError, match="Authorization header absent"
-    ):
-        await airtable.client.get(url)
+    with pytest.raises(ClientResponseError, match="Authorization header absent"):
+        _ = await airtable.client.get(url)
     assert server.requests() == []
 
 
@@ -469,9 +457,9 @@ async def test_airtable_underscore_request(
     airtable: Airtable,
     url: URL,
 ) -> None:
-    assert await airtable._request(
-        "GET", url, aat.RecordList
-    ) == aat.RecordList(records=())
+    assert await airtable._request("GET", url, aat.RecordList) == aat.RecordList(
+        records=()
+    )
     assert server.requests() == [RequestData("GET", url, None)]
 
 
@@ -519,29 +507,28 @@ async def test_airtable_context(airtable: Airtable) -> None:
 
 
 @pytest.mark.asyncio
-async def test_airtable_base(airtable: Airtable) -> None:
+async def test_airtable_base(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     assert isinstance(base, AirtableBase)
     assert base.id == "some_base_id"
 
 
 @pytest.mark.asyncio
-async def test_airtable_base_repr(airtable: Airtable) -> None:
+async def test_airtable_base_repr(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     assert repr(base) == (
-        "AirtableBase(base_id='some_base_id', "
-        "airtable=Airtable(api_key='...'))"
+        "AirtableBase(base_id='some_base_id', airtable=Airtable(api_key='...'))"
     )
 
 
 @pytest.mark.asyncio
-async def test_airtable_base_id(airtable: Airtable) -> None:
+async def test_airtable_base_id(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     assert base.id == "some_base_id"
 
 
 @pytest.mark.asyncio
-async def test_airtable_base_url(airtable: Airtable) -> None:
+async def test_airtable_base_url(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     assert base.url == aat.API_URL / "some_base_id"
 
@@ -551,9 +538,7 @@ async def test_airtable_base_request(
     server: AirtableServer, airtable: Airtable, url: URL
 ) -> None:
     base = airtable.base("base_id")
-    assert await base.request("GET", url, aat.RecordList) == aat.RecordList(
-        records=()
-    )
+    assert await base.request("GET", url, aat.RecordList) == aat.RecordList(records=())
     assert server.requests() == [RequestData("GET", url, None)]
 
 
@@ -562,7 +547,7 @@ class S(Struct):
 
 
 @pytest.mark.asyncio
-async def test_airtable_base_table(airtable: Airtable) -> None:
+async def test_airtable_base_table(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     table = base.table("some_table", Fields)
     assert isinstance(table, AirtableTable)
@@ -614,24 +599,22 @@ async def test_airtable_table_list_records(
     assert server.requests() == [
         RequestData(
             "GET",
-            table.url.with_query(
-                (
-                    ("fields[]", "field_1"),
-                    ("fields[]", "field_2"),
-                    ("filterByFormula", "{field_3}"),
-                    ("maxRecords", "100500"),
-                    ("pageSize", "3"),
-                    ("sort[0][field]", "field_1"),
-                    ("sort[0][direction]", "asc"),
-                    ("sort[1][field]", "field_2"),
-                    ("sort[1][direction]", "desc"),
-                    ("view", "table3"),
-                    ("cellFormat", "json"),
-                    ("timeZone", "Europe/Moscow"),
-                    ("userLocale", "ru"),
-                    ("offset", "record033"),
-                )
-            ),
+            table.url.with_query((
+                ("fields[]", "field_1"),
+                ("fields[]", "field_2"),
+                ("filterByFormula", "{field_3}"),
+                ("maxRecords", "100500"),
+                ("pageSize", "3"),
+                ("sort[0][field]", "field_1"),
+                ("sort[0][direction]", "asc"),
+                ("sort[1][field]", "field_2"),
+                ("sort[1][direction]", "desc"),
+                ("view", "table3"),
+                ("cellFormat", "json"),
+                ("timeZone", "Europe/Moscow"),
+                ("userLocale", "ru"),
+                ("offset", "record033"),
+            )),
             None,
         )
     ]
@@ -665,7 +648,7 @@ async def test_airtable_table_iter_records(
     ]
     assert len(records) == 6
     for index, record in enumerate(records):
-        isinstance(record, AirtableRecord)
+        assert isinstance(record, AirtableRecord)
         assert record.id == f"record{index:03d}"
         assert record.fields.field_1 == f"value_1_{index:03d}"
         assert record.fields.field_2 is None
@@ -675,25 +658,21 @@ async def test_airtable_table_iter_records(
     assert server.requests() == [
         RequestData(
             "GET",
-            table.url.with_query(
-                (
-                    ("fields[]", "field_1"),
-                    ("maxRecords", "6"),
-                    ("pageSize", "3"),
-                )
-            ),
+            table.url.with_query((
+                ("fields[]", "field_1"),
+                ("maxRecords", "6"),
+                ("pageSize", "3"),
+            )),
             None,
         ),
         RequestData(
             "GET",
-            table.url.with_query(
-                (
-                    ("fields[]", "field_1"),
-                    ("maxRecords", "6"),
-                    ("pageSize", "3"),
-                    ("offset", "record002"),
-                )
-            ),
+            table.url.with_query((
+                ("fields[]", "field_1"),
+                ("maxRecords", "6"),
+                ("pageSize", "3"),
+                ("offset", "record002"),
+            )),
             None,
         ),
     ]
@@ -730,7 +709,6 @@ async def test_airtable_table_retrieve_record(
 async def test_airtable_table_create_record(
     server: AirtableServer,
     airtable: Airtable,
-    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
     table = base.table("table_name", F)
@@ -765,9 +743,8 @@ async def test_airtable_table_create_record(
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_init(
+async def test_airtable_record_init(  # noqa: RUF029
     airtable: Airtable,
-    dt_str: str,
 ) -> None:
     base = airtable.base("some_base_id")
     table = base.table("some_table", Fields)
@@ -781,7 +758,7 @@ async def test_airtable_record_init(
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_repr(airtable: Airtable) -> None:
+async def test_airtable_record_repr(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     table = base.table("some_table", Fields)
     time_string = "2021-01-25T17:28:21.000Z"
@@ -802,7 +779,7 @@ async def test_airtable_record_repr(airtable: Airtable) -> None:
 
 
 @pytest.mark.asyncio
-async def test_airtable_record_table(airtable: Airtable) -> None:
+async def test_airtable_record_table(airtable: Airtable) -> None:  # noqa: RUF029
     base = airtable.base("some_base_id")
     table = base.table("some_table", Fields)
     record = AirtableRecord(
@@ -818,7 +795,6 @@ async def test_airtable_record_table(airtable: Airtable) -> None:
 async def test_airtable_record_request(
     server: AirtableServer,
     airtable: Airtable,
-    url: URL,
     dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
@@ -891,7 +867,6 @@ async def test_airtable_record_update(
 async def test_airtable_record_delete(
     server: AirtableServer,
     airtable: Airtable,
-    dt_str: str,
 ) -> None:
     base = airtable.base("base_id")
     table = base.table("table_name", Fields)

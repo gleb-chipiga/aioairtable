@@ -1,6 +1,143 @@
-[tool.isort]
-profile = "black"
-line_length = 79
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"
 
-[tool.black]
-line-length = 79
+[project]
+name = "aioairtable"
+version = "0.1.6"
+description = "Asynchronous client library for Airtable API"
+readme = "README.rst"
+license = { file = "LICENSE" }
+authors = [{ name = "Gleb Chipiga" }]
+requires-python = ">=3.11,<3.14"
+urls = { Homepage = "https://github.com/gleb-chipiga/aioairtable" }
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Internet",
+    "Framework :: AsyncIO",
+    "Topic :: Office/Business",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+    "Topic :: Office/Business :: Groupware",
+    "Topic :: Office/Business :: Scheduling",
+]
+dependencies = [
+    "aiohttp",
+    "multidict",
+    "yarl",
+    "backoff>=2",
+    "aiofreqlimit>=0.0.7",
+    "msgspec",
+]
+
+[dependency-groups]
+lint = [
+    "basedpyright>=1.33.0",
+    "mypy>=1.18.2",
+    "ruff>=0.14.5",
+    "pytest>=9.0.1",
+    "pytest-asyncio>=1.3.0",
+    "pytest-mock>=3.14.0",
+    "hypothesis>=6.148.1",
+]
+test = [
+    "pytest>=9.0.1",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "hypothesis>=6.148.1",
+]
+dev = [
+    "basedpyright>=1.33.0",
+    "build>=1.3.0",
+    "mypy>=1.18.2",
+    "pytest>=9.0.1",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.5",
+    "twine>=6.2.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+preview = true
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "B",
+    "C4",
+    "I",
+    "N",
+    "RET",
+    "RUF",
+    "SIM",
+    "UP",
+    "YTT",
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 88
+max-doc-length = 72
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["aioairtable"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.tox]
+requires = ["tox>=4.22", "tox-uv>=1.15"]
+env_list = ["py311", "py312", "py313", "lint"]
+
+[tool.tox.env_run_base]
+runner = "uv-venv-lock-runner"
+commands = [
+    ["pytest", "tests"],
+]
+
+[tool.tox.env.py311]
+description = "Tests on CPython 3.11"
+base_python = ["python3.11"]
+dependency_groups = ["test"]
+
+[tool.tox.env.py312]
+description = "Tests on CPython 3.12"
+base_python = ["python3.12"]
+dependency_groups = ["test"]
+
+[tool.tox.env.py313]
+description = "Tests on CPython 3.13"
+base_python = ["python3.13"]
+dependency_groups = ["test"]
+
+[tool.tox.env.lint]
+description = "Lint + type checks on CPython 3.11"
+base_python = ["python3.11"]
+dependency_groups = ["lint"]
+commands = [
+    ["ruff", "format", "--check", "src/aioairtable", "tests"],
+    ["ruff", "check", "src/aioairtable", "tests"],
+    ["mypy", "--strict", "src/aioairtable", "tests"],
+    ["basedpyright"],
+]

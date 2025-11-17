@@ -1,0 +1,46 @@
+[tasks.format]
+description = "Format code with Ruff"
+run = ".venv/bin/ruff format ."
+
+[tasks.lint]
+description = "Lint sources with Ruff"
+run = ".venv/bin/ruff check src/aioairtable tests"
+
+[tasks.mypy]
+description = "Type-check with mypy --strict"
+run = ".venv/bin/mypy --strict src/aioairtable tests"
+
+[tasks.basedpyright]
+description = "Type-check with basedpyright"
+run = ".venv/bin/basedpyright"
+
+[tasks.coverage]
+description = "Run pytest with coverage reports"
+env = { COVERAGE_FILE = ".coverage/.coverage" }
+run = """
+.venv/bin/python -m pytest --cov=src/aioairtable --cov-report term --cov-report html:.coverage tests
+"""
+
+[tasks.test]
+description = "Run unit tests"
+run = ".venv/bin/python -m pytest tests"
+
+[tasks.all]
+description = "Format, lint, type-check, and test"
+depends = ["format", "lint", "mypy", "basedpyright", "test"]
+run = "true"
+
+[tasks.build]
+description = "Build sdist and wheel artifacts"
+run = """
+if [ -d dist ]; then rm -rf dist; fi
+python -m build
+rm -rf *.egg-info
+"""
+
+[tasks.upload]
+description = "Upload packaged artifacts to PyPI via twine"
+run = """
+twine upload dist/*
+rm -rf dist
+"""
