@@ -40,3 +40,12 @@ repos:
     hooks:
       - id: basedpyright
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run --group test pytest
+        language: system
+        pass_filenames: false
+        stages: [commit]
