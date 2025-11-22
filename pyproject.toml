@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "aioairtable"
-version = "0.2.3"
+version = "0.2.4"
 description = "Asynchronous client library for Airtable API"
 readme = "README.md"
 license = { file = "LICENSE" }
