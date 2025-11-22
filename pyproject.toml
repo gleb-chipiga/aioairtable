@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "aioairtable"
 version = "0.2.3"
 description = "Asynchronous client library for Airtable API"
-readme = "README.rst"
+readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Gleb Chipiga" }]
 requires-python = ">=3.11,<3.14"
