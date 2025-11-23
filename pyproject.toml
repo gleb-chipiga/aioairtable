@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.9.6,<0.10.0"]
+requires = ["uv_build>=0.9.11,<0.10.0"]
 build-backend = "uv_build"
 
 [project]
@@ -31,41 +31,46 @@ classifiers = [
     "Topic :: Office/Business :: Scheduling",
 ]
 dependencies = [
-    "aiohttp",
-    "multidict",
-    "yarl",
-    "backoff>=2",
-    "aiofreqlimit>=0.0.7",
-    "msgspec",
-    "typing_extensions",
+    "aiohttp>=3.13.2,<4",
+    "multidict>=6.7.0,<7",
+    "yarl>=1.22.0,<2",
+    "tenacity>=9.1.2,<10",
+    "aiofreqlimit>=0.2.2,<0.3",
+    "msgspec>=0.19.0,<0.20",
+    "typing_extensions>=4.15.0,<5",
 ]
 
 [dependency-groups]
 lint = [
-    "basedpyright>=1.33.0",
-    "mypy>=1.18.2",
-    "ruff>=0.14.5",
-    "pytest>=9.0.1",
-    "pytest-asyncio>=1.3.0",
-    "pytest-mock>=3.14.0",
-    "hypothesis>=6.148.1",
+    "basedpyright>=1.34.0,<2",
+    "mypy>=1.18.2,<2",
+    "ruff>=0.14.6,<0.15",
+    "pytest>=9.0.1,<10",
+    "pytest-asyncio>=1.3.0,<2",
+    "pytest-mock>=3.15.1,<4",
+    "hypothesis>=6.148.2,<7",
+    "tenacity>=9.1.2,<10",
 ]
 test = [
-    "pytest>=9.0.1",
-    "pytest-asyncio>=1.3.0",
-    "pytest-cov>=7.0.0",
-    "pytest-mock>=3.14.0",
-    "hypothesis>=6.148.1",
+    "pytest>=9.0.1,<10",
+    "pytest-asyncio>=1.3.0,<2",
+    "pytest-cov>=7.0.0,<8",
+    "pytest-mock>=3.15.1,<4",
+    "hypothesis>=6.148.2,<7",
+    "tenacity>=9.1.2,<10",
 ]
 dev = [
-    "basedpyright>=1.33.0",
-    "build>=1.3.0",
-    "mypy>=1.18.2",
-    "pytest>=9.0.1",
-    "pytest-asyncio>=1.3.0",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.14.5",
-    "twine>=6.2.0",
+    "basedpyright>=1.34.0,<2",
+    "build>=1.3.0,<2",
+    "mypy>=1.18.2,<2",
+    "pytest>=9.0.1,<10",
+    "pytest-asyncio>=1.3.0,<2",
+    "pytest-cov>=7.0.0,<8",
+    "ruff>=0.14.6,<0.15",
+    "twine>=6.2.0,<7",
+    "tox>=4.32.0,<5",
+    "tox-uv>=1.29.0,<2",
+    "tenacity>=9.1.2,<10",
 ]
 
 [tool.ruff]

@@ -29,18 +29,3 @@ run = ".venv/bin/python -m pytest tests"
 description = "Format, lint, type-check, and test"
 depends = ["format", "lint", "mypy", "basedpyright", "test"]
 run = "true"
-
-[tasks.build]
-description = "Build sdist and wheel artifacts"
-run = """
-if [ -d dist ]; then rm -rf dist; fi
-python -m build
-rm -rf *.egg-info
-"""
-
-[tasks.upload]
-description = "Upload packaged artifacts to PyPI via twine"
-run = """
-twine upload dist/*
-rm -rf dist
-"""

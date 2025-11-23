@@ -3,21 +3,15 @@ from collections.abc import AsyncIterator, Generator, Iterable
 from datetime import datetime
 from enum import IntEnum, StrEnum, unique
 from types import TracebackType
-from typing import (
-    Any,
-    Final,
-    Generic,
-    Literal,
-    Self,
-    TypeVar,
-)
+from typing import Final, Generic, Literal, Self, TypeVar
 
-import backoff
 import msgspec.json
-from aiofreqlimit import FreqLimit
+from aiofreqlimit import FreqLimit, FreqLimitParams
+from aiofreqlimit.backends.memory import InMemoryBackend
 from aiohttp import BaseConnector, ClientResponseError, ClientSession
 from msgspec import Struct, field
 from multidict import CIMultiDict, MultiDict
+from tenacity import RetryCallState, retry, retry_if_exception
 from typing_extensions import override
 from yarl import URL
 
@@ -144,11 +138,12 @@ class CellFormat(StrEnum):
 
 def backoff_wait_gen(
     at_wait: float,
-) -> Generator[float, Any, None]:  # pyright: ignore[reportExplicitAny]
-    expo_gen = backoff.expo()
-    yield expo_gen.send(None)
-    for value in expo_gen:
-        yield at_wait + value
+) -> Generator[float, None, None]:
+    expo: float = 1.0
+    yield expo
+    while True:
+        yield at_wait + expo
+        expo *= 2
 
 
 def backoff_giveup(exception: Exception) -> bool:
@@ -159,6 +154,21 @@ def backoff_giveup(exception: Exception) -> bool:
         return True
     else:
         return False
+
+
+def backoff_should_retry(exception: BaseException) -> bool:
+    if not isinstance(exception, ClientResponseError):
+        return False
+    return not backoff_giveup(exception)
+
+
+def backoff_wait(at_wait: float, retry_state: RetryCallState) -> float:
+    attempt = int(retry_state.attempt_number)
+    expo_int = 1 << (attempt - 1)
+    expo = float(expo_int)
+    if attempt == 1:
+        return expo
+    return float(at_wait + expo)
 
 
 def build_repr(
@@ -190,7 +200,8 @@ class Airtable:
             connector=connector,
             raise_for_status=True,
         )
-        self._freq_limit: FreqLimit = FreqLimit(AT_INTERVAL)
+        params = FreqLimitParams(limit=1, period=AT_INTERVAL)
+        self._freq_limit: FreqLimit = FreqLimit(params, backend=InMemoryBackend())
 
     @override
     def __repr__(self) -> str:
@@ -227,11 +238,10 @@ class Airtable:
             )
             return response
 
-    @backoff.on_exception(
-        backoff_wait_gen,
-        ClientResponseError,
-        giveup=backoff_giveup,
-        at_wait=AT_WAIT,
+    @retry(
+        retry=retry_if_exception(lambda exc: backoff_should_retry(exc)),
+        wait=lambda state: backoff_wait(AT_WAIT, state),
+        reraise=True,
     )
     async def request(
         self,

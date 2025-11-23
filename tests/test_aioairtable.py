@@ -14,7 +14,6 @@ from typing import (
     runtime_checkable,
 )
 
-import backoff
 import pytest
 import pytest_asyncio
 from aiohttp import (
@@ -43,6 +42,7 @@ from hypothesis import given
 from hypothesis.strategies import integers
 from msgspec import Struct
 from multidict import CIMultiDict, CIMultiDictProxy
+from tenacity import retry, retry_if_exception
 from yarl import URL
 
 from aioairtable import aioairtable as aat
@@ -399,11 +399,10 @@ async def test_backoff() -> None:
         def __init__(self) -> None:
             self.first_attempt = True
 
-        @backoff.on_exception(
-            aat.backoff_wait_gen,
-            ClientResponseError,
-            giveup=aat.backoff_giveup,
-            at_wait=0.01,
+        @retry(
+            retry=retry_if_exception(lambda exc: aat.backoff_should_retry(exc)),
+            wait=lambda state: aat.backoff_wait(0.01, state),
+            reraise=True,
         )
         async def request(self) -> None:
             if self.first_attempt:
