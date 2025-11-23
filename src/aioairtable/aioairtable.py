@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncIterator, Generator, Iterable
+from collections.abc import AsyncIterator, Iterable
 from datetime import datetime
 from enum import IntEnum, StrEnum, unique
 from types import TracebackType
@@ -34,8 +34,13 @@ __all__ = (
 
 SOFTWARE: Final = get_software()
 API_URL: Final = URL("https://api.airtable.com/v0")
-AT_INTERVAL: Final = 1 / 5
+AT_LIMIT: Final = 5  # per-base rate limit from Airtable docs
+AT_PERIOD: Final = 1.0
+AT_INTERVAL: Final = AT_PERIOD / AT_LIMIT
 AT_WAIT: Final = 30.0
+AT_LIMIT_PARAMS: Final = FreqLimitParams(
+    limit=AT_LIMIT, period=AT_PERIOD, burst=AT_LIMIT
+)
 
 
 @unique
@@ -136,16 +141,6 @@ class CellFormat(StrEnum):
     STRING = "string"
 
 
-def backoff_wait_gen(
-    at_wait: float,
-) -> Generator[float, None, None]:
-    expo: float = 1.0
-    yield expo
-    while True:
-        yield at_wait + expo
-        expo *= 2
-
-
 def backoff_giveup(exception: Exception) -> bool:
     assert isinstance(exception, ClientResponseError)
     try:
@@ -200,8 +195,9 @@ class Airtable:
             connector=connector,
             raise_for_status=True,
         )
-        params = FreqLimitParams(limit=1, period=AT_INTERVAL)
-        self._freq_limit: FreqLimit = FreqLimit(params, backend=InMemoryBackend())
+        self._freq_limit: FreqLimit = FreqLimit(
+            AT_LIMIT_PARAMS, backend=InMemoryBackend()
+        )
 
     @override
     def __repr__(self) -> str:

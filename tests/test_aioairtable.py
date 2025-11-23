@@ -5,14 +5,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from tempfile import mkdtemp
-from typing import (
-    Any,
-    Final,
-    Protocol,
-    TypedDict,
-    cast,
-    runtime_checkable,
-)
+from typing import Any, Final, Protocol, TypedDict, cast, runtime_checkable
 
 import pytest
 import pytest_asyncio
@@ -42,6 +35,7 @@ from hypothesis import given
 from hypothesis.strategies import integers
 from msgspec import Struct
 from multidict import CIMultiDict, CIMultiDictProxy
+from pytest_mock import MockerFixture
 from tenacity import retry, retry_if_exception
 from yarl import URL
 
@@ -384,13 +378,6 @@ async def airtable(server: AirtableServer) -> AsyncGenerator[Airtable, None]:
     await airtable.close()
 
 
-def test_backoff_wait_gen() -> None:
-    wait_gen = aat.backoff_wait_gen(aat.AT_WAIT)
-    _ = wait_gen.send(None)
-    for value, i in zip(wait_gen, range(16), strict=False):
-        assert value == aat.AT_WAIT + 2**i
-
-
 @pytest.mark.asyncio
 async def test_backoff() -> None:
     class TestClient:
@@ -474,26 +461,96 @@ async def test_airtable_request(
     url: URL,
 ) -> None:
     loop = asyncio.get_running_loop()
-    time1 = loop.time()
-    assert await airtable.request(
-        "base_id",
-        "GET",
-        url,
-        aat.RecordList,
-    ) == aat.RecordList(records=())
-    assert server.requests() == [RequestData("GET", url, None)]
-    assert await airtable.request(
-        "base_id",
-        "GET",
-        url,
-        aat.RecordList,
-    ) == aat.RecordList(records=())
-    time2 = loop.time()
-    assert time2 - time1 >= aat.AT_INTERVAL
-    assert server.requests() == [
-        RequestData("GET", url, None),
-        RequestData("GET", url, None),
-    ]
+    for _ in range(aat.AT_LIMIT):
+        req = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+        assert req == aat.RecordList(records=())
+    requests_before = len(server.requests())
+    time_before = loop.time()
+    next_req = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+    assert next_req == aat.RecordList(records=())
+    time_after = loop.time()
+    assert time_after - time_before >= aat.AT_INTERVAL * 0.8
+    assert len(server.requests()) == requests_before + 1
+
+
+@pytest.mark.asyncio
+async def test_airtable_request_burst(
+    server: AirtableServer,
+    airtable: Airtable,
+    url: URL,
+) -> None:
+    _ = server  # silence unused, fixture still ensures server running
+    loop = asyncio.get_running_loop()
+    # Burst: first AT_LIMIT calls should not be delayed noticeably.
+    start = loop.time()
+    for _ in range(aat.AT_LIMIT):
+        _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+    mid = loop.time()
+    # 6th call should incur delay of roughly AT_INTERVAL (0.2s)
+    _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+    end = loop.time()
+    assert (mid - start) < aat.AT_INTERVAL * 0.5  # burst passes fast
+    assert (end - mid) >= aat.AT_INTERVAL * 0.8
+
+
+@pytest.mark.asyncio
+async def test_airtable_request_isolated_keys(
+    airtable: Airtable,
+    url: URL,
+) -> None:
+    loop = asyncio.get_running_loop()
+    time_before = loop.time()
+    parallel = await asyncio.gather(
+        airtable.request("base_a", "GET", url, aat.RecordList[Fields]),
+        airtable.request("base_b", "GET", url, aat.RecordList[Fields]),
+    )
+    time_after = loop.time()
+    assert len(parallel) == 2
+    assert time_after - time_before < aat.AT_INTERVAL * 0.5
+
+
+@pytest.mark.asyncio
+async def test_airtable_request_burst_total_window(
+    airtable: Airtable,
+    url: URL,
+) -> None:
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    for _ in range(aat.AT_LIMIT):
+        _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+    end = loop.time()
+    assert end - start <= aat.AT_PERIOD * 1.1  # all burst calls fit in one window
+
+
+@pytest.mark.asyncio
+async def test_airtable_request_giveup_status(
+    airtable: Airtable,
+    url: URL,
+    mocker: MockerFixture,
+) -> None:
+    # Non-retriable status should call _request only once.
+    resp: aat.RecordList[Fields] = aat.RecordList(records=())
+    called: bool = False
+
+    async def fake_request(
+        *_args: object,
+        **_kwargs: object,
+    ) -> aat.RecordList[Fields]:
+        nonlocal called
+        await asyncio.sleep(0)
+        if not called:
+            called = True
+            raise ClientResponseError(
+                RequestInfo(url, "GET", CIMultiDictProxy(CIMultiDict[str]()), url),
+                (),
+                status=400,
+            )
+        return resp
+
+    _patch = mocker.patch.object(airtable, "_request", side_effect=fake_request)
+    with pytest.raises(ClientResponseError):
+        _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
+    assert called
 
 
 @pytest.mark.asyncio

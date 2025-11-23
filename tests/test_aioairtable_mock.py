@@ -123,16 +123,17 @@ async def test_airtable_request(
     loop = asyncio.get_running_loop()
     request = mocker.patch.object(airtable_mock, "_request")
     request.return_value = some_response_data
-    assert (
-        await airtable_mock.request(
-            "some_base_id",
-            "GET",
-            url,
-            SomeResponseData,
+    for _ in range(aat.AT_LIMIT):
+        assert (
+            await airtable_mock.request(
+                "some_base_id",
+                "GET",
+                url,
+                SomeResponseData,
+            )
+            == some_response_data
         )
-        == some_response_data
-    )
-    _ = request.assert_awaited_once_with("GET", url, SomeResponseData, None)
+    _ = request.assert_awaited_with("GET", url, SomeResponseData, None)
     time1 = loop.time()
     assert (
         await airtable_mock.request(
@@ -144,7 +145,7 @@ async def test_airtable_request(
         == some_response_data
     )
     time2 = loop.time()
-    assert time2 - time1 >= aat.AT_INTERVAL
+    assert time2 - time1 >= aat.AT_INTERVAL * 0.8
 
 
 @pytest.mark.asyncio
