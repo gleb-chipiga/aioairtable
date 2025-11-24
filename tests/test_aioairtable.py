@@ -474,14 +474,14 @@ async def test_airtable_request(
 
 
 @pytest.mark.asyncio
-async def test_airtable_request_burst(
+async def test_airtable_request_rate_limiting(
     server: AirtableServer,
     airtable: Airtable,
     url: URL,
 ) -> None:
     _ = server  # silence unused, fixture still ensures server running
     loop = asyncio.get_running_loop()
-    # Burst: first AT_LIMIT calls should not be delayed noticeably.
+    # Without burst: first call is immediate, others rate limited
     start = loop.time()
     for _ in range(aat.AT_LIMIT):
         _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
@@ -489,7 +489,8 @@ async def test_airtable_request_burst(
     # 6th call should incur delay of roughly AT_INTERVAL (0.2s)
     _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
     end = loop.time()
-    assert (mid - start) < aat.AT_INTERVAL * 0.5  # burst passes fast
+    # First 5 calls should take close to AT_PERIOD (1.0s)
+    assert (mid - start) >= aat.AT_PERIOD * 0.8
     assert (end - mid) >= aat.AT_INTERVAL * 0.8
 
 
@@ -510,7 +511,7 @@ async def test_airtable_request_isolated_keys(
 
 
 @pytest.mark.asyncio
-async def test_airtable_request_burst_total_window(
+async def test_airtable_request_rate_limiting_window(
     airtable: Airtable,
     url: URL,
 ) -> None:
@@ -519,7 +520,9 @@ async def test_airtable_request_burst_total_window(
     for _ in range(aat.AT_LIMIT):
         _ = await airtable.request("base_id", "GET", url, aat.RecordList[Fields])
     end = loop.time()
-    assert end - start <= aat.AT_PERIOD * 1.1  # all burst calls fit in one window
+    # Without burst, calls should take approximately AT_PERIOD
+    assert end - start >= aat.AT_PERIOD * 0.8
+    assert end - start <= aat.AT_PERIOD * 1.2  # allow some tolerance
 
 
 @pytest.mark.asyncio

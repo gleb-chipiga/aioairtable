@@ -38,9 +38,7 @@ AT_LIMIT: Final = 5  # per-base rate limit from Airtable docs
 AT_PERIOD: Final = 1.0
 AT_INTERVAL: Final = AT_PERIOD / AT_LIMIT
 AT_WAIT: Final = 30.0
-AT_LIMIT_PARAMS: Final = FreqLimitParams(
-    limit=AT_LIMIT, period=AT_PERIOD, burst=AT_LIMIT
-)
+AT_LIMIT_PARAMS: Final = FreqLimitParams(limit=AT_LIMIT, period=AT_PERIOD)
 
 
 @unique
